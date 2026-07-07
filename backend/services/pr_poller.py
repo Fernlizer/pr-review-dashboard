@@ -270,6 +270,68 @@ async def _process_new_pr(
         f"HIGH={high_count}, MEDIUM={medium_count}, LOW={low_count}"
     )
 
+    # Auto-comment if enabled
+    await _maybe_auto_comment(db, repo, pr, review, security_findings)
+
+
+async def _maybe_auto_comment(
+    db: AsyncSession, repo: str, pr: PullRequest, review: Review,
+    security_findings: list,
+):
+    """Post comments to Azure DevOps PR if auto-comment is enabled."""
+    from models import AppConfig
+    from services.auto_comment import auto_comment_on_review
+
+    # Check if auto-comment is enabled
+    result = await db.execute(
+        select(AppConfig).where(AppConfig.key == "auto_comment_enabled")
+    )
+    config = result.scalar_one_or_none()
+    if not config or config.value.lower() != "true":
+        return
+
+    # Build findings data for comment
+    findings_data = [
+        {
+            "severity": f.severity,
+            "category": f.category,
+            "owasp_tag": f.owasp_tag,
+            "file_path": f.file_path,
+            "line_number": f.line_number,
+            "description": f.description,
+            "code_snippet": f.code_snippet,
+            "fix_suggestion": f.fix_suggestion,
+        }
+        for f in review.findings
+    ]
+
+    scores = {
+        "Logic": review.score_logic or 0,
+        "Security": review.score_security or 0,
+        "Tests": review.score_tests or 0,
+        "Style": review.score_style or 0,
+        "Architecture": review.score_architecture or 0,
+    }
+
+    logger.info(f"Auto-commenting on PR #{pr.azure_pr_id} in {repo}...")
+    stats = await auto_comment_on_review(
+        repo=repo,
+        pr_id=pr.azure_pr_id,
+        title=pr.title or "",
+        recommendation=review.recommendation or "comment",
+        findings=findings_data,
+        scores=scores,
+        duration_seconds=review.duration_seconds or 0,
+    )
+
+    if stats["summary_posted"]:
+        logger.info(f"  ✅ Summary comment posted on PR #{pr.azure_pr_id}")
+    if stats["inline_posted"] > 0:
+        logger.info(f"  ✅ {stats['inline_posted']} inline comments posted on PR #{pr.azure_pr_id}")
+    if stats["errors"]:
+        for err in stats["errors"]:
+            logger.error(f"  ❌ {err}")
+
 
 def _parse_date(date_str: str) -> Optional[datetime]:
     if not date_str:

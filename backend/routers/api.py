@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 import logging
 
 from database import get_db
-from models import PullRequest, Review, Finding, PollState
+from models import PullRequest, Review, Finding, PollState, AppConfig
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api")
@@ -414,6 +414,50 @@ async def disable_scheduler(request: Request):
         "status": "disabled",
         "message": "Poller paused. No automatic polling until re-enabled.",
     }
+
+
+# --- Auto-Comment Settings ---
+
+async def _get_config_value(db: AsyncSession, key: str, default: str = "") -> str:
+    """Get config value from DB."""
+    result = await db.execute(select(AppConfig).where(AppConfig.key == key))
+    config = result.scalar_one_or_none()
+    return config.value if config else default
+
+
+async def _set_config_value(db: AsyncSession, key: str, value: str):
+    """Set config value in DB (upsert)."""
+    result = await db.execute(select(AppConfig).where(AppConfig.key == key))
+    config = result.scalar_one_or_none()
+    if config:
+        config.value = value
+    else:
+        config = AppConfig(key=key, value=value)
+        db.add(config)
+    await db.commit()
+
+
+@router.get("/settings/auto-comment")
+async def get_auto_comment_setting(db: AsyncSession = Depends(get_db)):
+    """Get auto-comment enabled status."""
+    value = await _get_config_value(db, "auto_comment_enabled", "false")
+    return {"enabled": value.lower() == "true"}
+
+
+@router.post("/settings/auto-comment/enable")
+async def enable_auto_comment(db: AsyncSession = Depends(get_db)):
+    """Enable auto-comment on PRs after review."""
+    await _set_config_value(db, "auto_comment_enabled", "true")
+    logger.info("Auto-comment enabled")
+    return {"status": "enabled", "message": "Auto-comment is now ON. Reviews will post comments to PRs."}
+
+
+@router.post("/settings/auto-comment/disable")
+async def disable_auto_comment(db: AsyncSession = Depends(get_db)):
+    """Disable auto-comment on PRs after review."""
+    await _set_config_value(db, "auto_comment_enabled", "false")
+    logger.info("Auto-comment disabled")
+    return {"status": "disabled", "message": "Auto-comment is now OFF. Reviews will not post comments."}
 
 
 # --- Helpers ---

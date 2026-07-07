@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Settings as SettingsIcon, Play, Pause, Clock, RefreshCw, CheckCircle, XCircle } from 'lucide-react'
+import { Settings as SettingsIcon, Play, Pause, Clock, RefreshCw, CheckCircle, XCircle, MessageCircle } from 'lucide-react'
 
 function SettingsPage() {
   const [status, setStatus] = useState(null)
@@ -7,6 +7,8 @@ function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState('')
   const [message, setMessage] = useState(null)
+  const [autoComment, setAutoComment] = useState(false)
+  const [autoCommentLoading, setAutoCommentLoading] = useState(false)
 
   const fetchStatus = async () => {
     try {
@@ -21,8 +23,37 @@ function SettingsPage() {
     }
   }
 
+  const fetchAutoComment = async () => {
+    try {
+      const resp = await fetch('/api/settings/auto-comment')
+      const data = await resp.json()
+      setAutoComment(data.enabled)
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const toggleAutoComment = async () => {
+    setAutoCommentLoading(true)
+    setMessage(null)
+    try {
+      const endpoint = autoComment
+        ? '/api/settings/auto-comment/disable'
+        : '/api/settings/auto-comment/enable'
+      const resp = await fetch(endpoint, { method: 'POST' })
+      const data = await resp.json()
+      setAutoComment(!autoComment)
+      setMessage({ type: 'success', text: data.message })
+    } catch (e) {
+      setMessage({ type: 'error', text: 'Failed to toggle auto-comment' })
+    } finally {
+      setAutoCommentLoading(false)
+    }
+  }
+
   useEffect(() => {
     fetchStatus()
+    fetchAutoComment()
     // Refresh status every 5 seconds
     const timer = setInterval(fetchStatus, 5000)
     return () => clearInterval(timer)
@@ -224,6 +255,52 @@ function SettingsPage() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Auto-Comment Settings */}
+      <div className="bg-dark-900 border border-dark-700 rounded-xl p-6">
+        <h3 className="text-lg font-semibold text-dark-200 mb-2">Auto-Comment</h3>
+        <p className="text-sm text-dark-400 mb-4">
+          ส่ง comment กลับไปบน Azure DevOps PR อัตโนมัติหลัง review เสร็จ
+        </p>
+
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-dark-200 font-medium">
+              {autoComment ? '✅ เปิดอยู่' : '⬜ ปิดอยู่'}
+            </p>
+            <p className="text-xs text-dark-500 mt-1">
+              {autoComment
+                ? 'Review เสร็จ → comment summary + inline findings บน PR'
+                : 'Review เสร็จ → เก็บผลใน DB เท่านั้น ไม่ comment บน PR'}
+            </p>
+          </div>
+
+          <button
+            onClick={toggleAutoComment}
+            disabled={autoCommentLoading}
+            className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors ${
+              autoComment ? 'bg-emerald-600' : 'bg-dark-600'
+            } disabled:opacity-50`}
+          >
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                autoComment ? 'translate-x-8' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+
+        {autoComment && (
+          <div className="bg-dark-800 rounded-lg p-4 text-sm text-dark-300">
+            <p className="font-medium text-dark-200 mb-2">เมื่อ review เสร็จ ระบบจะ:</p>
+            <ul className="space-y-1 list-disc list-inside">
+              <li>📝 Post <strong>summary comment</strong> บน PR thread (scores + recommendation)</li>
+              <li>🔴 Post <strong>inline comments</strong> บนบรรทัดที่เจอ HIGH/MEDIUM findings</li>
+              <li>💡 ทุก comment มี <strong>fix suggestion</strong> แนบ</li>
+            </ul>
+          </div>
+        )}
       </div>
 
       {/* Message */}
