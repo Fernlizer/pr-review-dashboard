@@ -1,0 +1,9 @@
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
+sqlalchemy[asyncio]==2.0.41
+asyncpg==0.30.0
+apscheduler==3.11.0
+httpx==0.28.1
+pydantic-settings==2.13.1
+python-dotenv==1.2.2
+greenlet==3.1.1

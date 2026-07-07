@@ -1,0 +1,26 @@
+version: "3.9"
+
+services:
+  backend:
+    build: ./backend
+    container_name: pr-review-backend
+    ports:
+      - "9100:9100"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://admin:fern@host.docker.internal:5432/pr_review
+      - AZURE_ORG=AXONS-FIT-Business-and-CPTG
+      - AZURE_PROJECT=AgriTech
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: pr-review-frontend
+    ports:
+      - "9101:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

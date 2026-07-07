@@ -1,0 +1,428 @@
+"""API endpoints for PRs, reviews, findings, and stats."""
+
+from typing import List, Optional
+from fastapi import APIRouter, Depends, Query, HTTPException, Request
+from pydantic import BaseModel, Field
+from sqlalchemy import select, func, desc
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+import logging
+
+from database import get_db
+from models import PullRequest, Review, Finding, PollState
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api")
+
+
+# --- PRs ---
+
+@router.get("/prs")
+async def list_prs(
+    repo: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = Query(50, le=200),
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+):
+    query = select(PullRequest).options(selectinload(PullRequest.reviews))
+    if repo:
+        query = query.where(PullRequest.repo == repo)
+    if status:
+        query = query.where(PullRequest.status == status)
+    query = query.order_by(desc(PullRequest.discovered_at)).limit(limit).offset(offset)
+
+    result = await db.execute(query)
+    prs = result.scalars().all()
+
+    # Count total
+    count_query = select(func.count(PullRequest.id))
+    if repo:
+        count_query = count_query.where(PullRequest.repo == repo)
+    if status:
+        count_query = count_query.where(PullRequest.status == status)
+    total = (await db.execute(count_query)).scalar()
+
+    return {
+        "total": total,
+        "prs": [
+            {
+                "id": pr.id,
+                "azure_pr_id": pr.azure_pr_id,
+                "repo": pr.repo,
+                "title": pr.title,
+                "author": pr.author,
+                "source_branch": pr.source_branch,
+                "target_branch": pr.target_branch,
+                "status": pr.status,
+                "is_reviewer_required": pr.is_reviewer_required,
+                "url": pr.url,
+                "discovered_at": pr.discovered_at.isoformat() if pr.discovered_at else None,
+                "azure_created_at": pr.azure_created_at.isoformat() if pr.azure_created_at else None,
+                "latest_review": _review_summary(pr.reviews[0]) if pr.reviews else None,
+            }
+            for pr in prs
+        ],
+    }
+
+
+@router.get("/prs/{pr_id}")
+async def get_pr(pr_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(PullRequest)
+        .options(selectinload(PullRequest.reviews).selectinload(Review.findings))
+        .where(PullRequest.id == pr_id)
+    )
+    pr = result.scalar_one_or_none()
+    if not pr:
+        raise HTTPException(404, "PR not found")
+
+    return {
+        "id": pr.id,
+        "azure_pr_id": pr.azure_pr_id,
+        "repo": pr.repo,
+        "title": pr.title,
+        "description": pr.description,
+        "author": pr.author,
+        "author_email": pr.author_email,
+        "source_branch": pr.source_branch,
+        "target_branch": pr.target_branch,
+        "status": pr.status,
+        "is_reviewer_required": pr.is_reviewer_required,
+        "reviewers_json": pr.reviewers_json,
+        "url": pr.url,
+        "discovered_at": pr.discovered_at.isoformat() if pr.discovered_at else None,
+        "azure_created_at": pr.azure_created_at.isoformat() if pr.azure_created_at else None,
+        "reviews": [
+            {
+                "id": rv.id,
+                "status": rv.status,
+                "score_logic": rv.score_logic,
+                "score_security": rv.score_security,
+                "score_tests": rv.score_tests,
+                "score_style": rv.score_style,
+                "score_architecture": rv.score_architecture,
+                "summary": rv.summary,
+                "recommendation": rv.recommendation,
+                "started_at": rv.started_at.isoformat() if rv.started_at else None,
+                "completed_at": rv.completed_at.isoformat() if rv.completed_at else None,
+                "duration_seconds": rv.duration_seconds,
+                "findings": [
+                    {
+                        "id": f.id,
+                        "severity": f.severity,
+                        "category": f.category,
+                        "owasp_tag": f.owasp_tag,
+                        "file_path": f.file_path,
+                        "line_number": f.line_number,
+                        "function_name": f.function_name,
+                        "description": f.description,
+                        "code_snippet": f.code_snippet,
+                        "fix_suggestion": f.fix_suggestion,
+                        "is_automated": f.is_automated,
+                    }
+                    for f in rv.findings
+                ],
+            }
+            for rv in pr.reviews
+        ],
+    }
+
+
+# --- Reviews ---
+
+@router.get("/reviews")
+async def list_reviews(
+    status: Optional[str] = None,
+    recommendation: Optional[str] = None,
+    limit: int = Query(50, le=200),
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+):
+    query = select(Review).options(selectinload(Review.findings), selectinload(Review.pull_request))
+    if status:
+        query = query.where(Review.status == status)
+    if recommendation:
+        query = query.where(Review.recommendation == recommendation)
+    query = query.order_by(desc(Review.created_at)).limit(limit).offset(offset)
+
+    result = await db.execute(query)
+    reviews = result.scalars().all()
+
+    return {
+        "reviews": [
+            {
+                "id": rv.id,
+                "pr_id": rv.pr_id,
+                "status": rv.status,
+                "recommendation": rv.recommendation,
+                "summary": rv.summary,
+                "score_security": rv.score_security,
+                "high_count": sum(1 for f in rv.findings if f.severity == "HIGH"),
+                "medium_count": sum(1 for f in rv.findings if f.severity == "MEDIUM"),
+                "low_count": sum(1 for f in rv.findings if f.severity == "LOW"),
+                "duration_seconds": rv.duration_seconds,
+                "created_at": rv.created_at.isoformat() if rv.created_at else None,
+                "pr_title": rv.pull_request.title if rv.pull_request else None,
+                "pr_repo": rv.pull_request.repo if rv.pull_request else None,
+            }
+            for rv in reviews
+        ],
+    }
+
+
+@router.get("/reviews/{review_id}")
+async def get_review(review_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Review)
+        .options(selectinload(Review.findings), selectinload(Review.pull_request))
+        .where(Review.id == review_id)
+    )
+    review = result.scalar_one_or_none()
+    if not review:
+        raise HTTPException(404, "Review not found")
+
+    return {
+        "id": review.id,
+        "pr_id": review.pr_id,
+        "status": review.status,
+        "score_logic": review.score_logic,
+        "score_security": review.score_security,
+        "score_tests": review.score_tests,
+        "score_style": review.score_style,
+        "score_architecture": review.score_architecture,
+        "summary": review.summary,
+        "recommendation": review.recommendation,
+        "raw_diff": review.raw_diff,
+        "security_scan_json": review.security_scan_json,
+        "started_at": review.started_at.isoformat() if review.started_at else None,
+        "completed_at": review.completed_at.isoformat() if review.completed_at else None,
+        "duration_seconds": review.duration_seconds,
+        "findings": [
+            {
+                "id": f.id,
+                "severity": f.severity,
+                "category": f.category,
+                "owasp_tag": f.owasp_tag,
+                "file_path": f.file_path,
+                "line_number": f.line_number,
+                "function_name": f.function_name,
+                "description": f.description,
+                "code_snippet": f.code_snippet,
+                "fix_suggestion": f.fix_suggestion,
+                "is_automated": f.is_automated,
+            }
+            for f in review.findings
+        ],
+        "pr": {
+            "id": review.pull_request.id,
+            "azure_pr_id": review.pull_request.azure_pr_id,
+            "repo": review.pull_request.repo,
+            "title": review.pull_request.title,
+            "author": review.pull_request.author,
+            "url": review.pull_request.url,
+        } if review.pull_request else None,
+    }
+
+
+@router.post("/prs/{pr_id}/review")
+async def trigger_review(pr_id: int, db: AsyncSession = Depends(get_db)):
+    """Manually trigger a review for a specific PR."""
+    from services.pr_poller import _process_new_pr
+    from services.azure_client import AzureDevOpsClient
+
+    # Get PR from DB
+    result = await db.execute(select(PullRequest).where(PullRequest.id == pr_id))
+    pr = result.scalar_one_or_none()
+    if not pr:
+        raise HTTPException(404, "PR not found")
+
+    client = AzureDevOpsClient()
+    pr_data = {
+        "azure_pr_id": pr.azure_pr_id,
+        "title": pr.title,
+        "description": pr.description or "",
+        "author": pr.author or "",
+        "author_email": pr.author_email or "",
+        "source_branch": pr.source_branch or "",
+        "target_branch": pr.target_branch or "",
+        "status": pr.status or "active",
+        "is_reviewer_required": pr.is_reviewer_required or "no",
+        "reviewers_json": pr.reviewers_json or "[]",
+        "url": pr.url or "",
+    }
+
+    try:
+        await _process_new_pr(db, client, pr.repo, pr_data, existing_pr=pr)
+        return {"status": "completed", "message": f"Review completed for PR #{pr.azure_pr_id}"}
+    except Exception as e:
+        raise HTTPException(500, f"Review failed: {str(e)}")
+
+
+# --- Stats ---
+
+@router.get("/stats")
+async def get_stats(db: AsyncSession = Depends(get_db)):
+    total_prs = (await db.execute(select(func.count(PullRequest.id)))).scalar()
+    total_reviews = (await db.execute(select(func.count(Review.id)))).scalar()
+    total_findings = (await db.execute(select(func.count(Finding.id)))).scalar()
+
+    # Findings by severity
+    severity_counts = {}
+    for sev in ["HIGH", "MEDIUM", "LOW"]:
+        count = (await db.execute(
+            select(func.count(Finding.id)).where(Finding.severity == sev)
+        )).scalar()
+        severity_counts[sev] = count
+
+    # Recommendations breakdown
+    rec_counts = {}
+    for rec in ["approve", "request_changes", "comment"]:
+        count = (await db.execute(
+            select(func.count(Review.id)).where(Review.recommendation == rec)
+        )).scalar()
+        rec_counts[rec] = count
+
+    # Poll state
+    poll_states = (await db.execute(select(PollState))).scalars().all()
+
+    return {
+        "total_prs": total_prs,
+        "total_reviews": total_reviews,
+        "total_findings": total_findings,
+        "findings_by_severity": severity_counts,
+        "recommendations": rec_counts,
+        "poll_states": [
+            {
+                "repo": ps.repo,
+                "last_poll_at": ps.last_poll_at.isoformat() if ps.last_poll_at else None,
+            }
+            for ps in poll_states
+        ],
+    }
+
+
+# --- Manual Trigger ---
+
+@router.post("/poll")
+async def trigger_poll(db: AsyncSession = Depends(get_db)):
+    """Manually trigger a poll cycle."""
+    from services.pr_poller import poll_and_review
+    result = await poll_and_review(db)
+    return result
+
+
+# --- Scheduler Control ---
+
+@router.get("/scheduler/status")
+async def scheduler_status(request: Request):
+    """Get real scheduler status — reads from APScheduler, not a flag."""
+    sched = request.app.state.scheduler
+    job = sched.get_job("pr_poller")
+
+    is_running = False
+    next_run_time = None
+    interval_minutes = getattr(request.app.state, "poll_interval", 10)
+
+    if job:
+        is_running = job.next_run_time is not None
+        if job.next_run_time:
+            next_run_time = job.next_run_time.isoformat()
+
+    return {
+        "enabled": is_running,
+        "interval_minutes": interval_minutes,
+        "next_run": next_run_time,
+        "job_exists": job is not None,
+        "scheduler_running": sched.running,
+    }
+
+
+class SchedulerIntervalUpdate(BaseModel):
+    minutes: int = Field(ge=1, le=1440, description="Poll interval in minutes (1-1440)")
+
+
+@router.put("/scheduler/interval")
+async def update_interval(body: SchedulerIntervalUpdate, request: Request):
+    """Update poll interval — reschedules the job with new interval."""
+    sched = request.app.state.scheduler
+    job = sched.get_job("pr_poller")
+
+    if not job:
+        raise HTTPException(404, "Poller job not found")
+
+    sched.reschedule_job(
+        "pr_poller",
+        trigger="interval",
+        minutes=body.minutes,
+    )
+    request.app.state.poll_interval = body.minutes
+
+    logger.info(f"Poll interval updated to {body.minutes} minutes")
+
+    return {
+        "status": "updated",
+        "interval_minutes": body.minutes,
+        "next_run": job.next_run_time.isoformat() if job.next_run_time else None,
+    }
+
+
+@router.post("/scheduler/enable")
+async def enable_scheduler(request: Request):
+    """Enable the poller — resumes the paused job."""
+    sched = request.app.state.scheduler
+    job = sched.get_job("pr_poller")
+
+    if not job:
+        raise HTTPException(404, "Poller job not found")
+
+    if job.next_run_time is not None:
+        return {"status": "already_enabled", "message": "Poller is already running"}
+
+    sched.resume_job("pr_poller")
+    request.app.state.poller_enabled = True
+
+    # Re-read job state after resume
+    job = sched.get_job("pr_poller")
+    logger.info("Poller enabled")
+
+    return {
+        "status": "enabled",
+        "next_run": job.next_run_time.isoformat() if job and job.next_run_time else None,
+    }
+
+
+@router.post("/scheduler/disable")
+async def disable_scheduler(request: Request):
+    """Disable the poller — pauses the job (does NOT remove it)."""
+    sched = request.app.state.scheduler
+    job = sched.get_job("pr_poller")
+
+    if not job:
+        raise HTTPException(404, "Poller job not found")
+
+    if job.next_run_time is None:
+        return {"status": "already_disabled", "message": "Poller is already paused"}
+
+    sched.pause_job("pr_poller")
+    request.app.state.poller_enabled = False
+
+    logger.info("Poller disabled")
+
+    return {
+        "status": "disabled",
+        "message": "Poller paused. No automatic polling until re-enabled.",
+    }
+
+
+# --- Helpers ---
+
+def _review_summary(review: Review) -> dict:
+    return {
+        "id": review.id,
+        "status": review.status,
+        "recommendation": review.recommendation,
+        "score_security": review.score_security,
+        "completed_at": review.completed_at.isoformat() if review.completed_at else None,
+    }
