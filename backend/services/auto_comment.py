@@ -35,6 +35,10 @@ class AzureDevOpsCommentClient:
         self, repo: str, pr_id: int, file_path: str, line_number: int, message: str
     ) -> Optional[dict]:
         """Post an inline comment on a specific line in a PR."""
+        # Azure DevOps requires leading / in filePath
+        if not file_path.startswith("/"):
+            file_path = "/" + file_path
+
         url = f"{self.base_url}/{repo}/pullrequests/{pr_id}/threads?api-version=7.1"
         body = {
             "comments": [{"content": message}],
