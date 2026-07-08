@@ -281,6 +281,7 @@ async def _maybe_auto_comment(
     """Post comments to Azure DevOps PR if auto-comment is enabled."""
     from models import AppConfig
     from services.auto_comment import auto_comment_on_review
+    from sqlalchemy.orm import selectinload
 
     # Check if auto-comment is enabled
     result = await db.execute(
@@ -288,6 +289,16 @@ async def _maybe_auto_comment(
     )
     config = result.scalar_one_or_none()
     if not config or config.value.lower() != "true":
+        return
+
+    # Re-fetch review with findings eagerly loaded (lazy load fails after commit)
+    result = await db.execute(
+        select(Review)
+        .options(selectinload(Review.findings))
+        .where(Review.id == review.id)
+    )
+    review_with_findings = result.scalar_one_or_none()
+    if not review_with_findings:
         return
 
     # Build findings data for comment
@@ -302,15 +313,15 @@ async def _maybe_auto_comment(
             "code_snippet": f.code_snippet,
             "fix_suggestion": f.fix_suggestion,
         }
-        for f in review.findings
+        for f in review_with_findings.findings
     ]
 
     scores = {
-        "Logic": review.score_logic or 0,
-        "Security": review.score_security or 0,
-        "Tests": review.score_tests or 0,
-        "Style": review.score_style or 0,
-        "Architecture": review.score_architecture or 0,
+        "Logic": review_with_findings.score_logic or 0,
+        "Security": review_with_findings.score_security or 0,
+        "Tests": review_with_findings.score_tests or 0,
+        "Style": review_with_findings.score_style or 0,
+        "Architecture": review_with_findings.score_architecture or 0,
     }
 
     logger.info(f"Auto-commenting on PR #{pr.azure_pr_id} in {repo}...")

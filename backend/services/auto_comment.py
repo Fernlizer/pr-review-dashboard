@@ -44,7 +44,7 @@ class AzureDevOpsCommentClient:
             "comments": [{"content": message}],
             "threadContext": {
                 "filePath": file_path,
-                "rightFileStart": {"line": line_number},
+                "rightFileStart": {"line": line_number, "offset": 1},
             },
         }
         return await self._post_comment(
@@ -208,6 +208,10 @@ async def auto_comment_on_review(
         if key in seen_lines:
             continue
         seen_lines.add(key)
+
+        # Skip if no valid file path or line number
+        if not file_path or not line_number or line_number < 1:
+            continue
 
         comment_text = format_inline_comment(
             severity=severity,
