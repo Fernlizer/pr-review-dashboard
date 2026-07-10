@@ -103,6 +103,12 @@ async def poll_and_review(db: AsyncSession) -> Dict[str, Any]:
                 summary["new_prs"] += 0
                 continue
 
+            # Ensure poll_state is always updated (even when first-run is skipped)
+            if state.last_poll_at is None:
+                state.last_poll_at = datetime.now(timezone.utc)
+                state.last_seen_pr_ids = json.dumps(list(current_ids))
+                logger.info(f"[{repo}] Synced poll_state with {len(current_ids)} existing PRs")
+
             # Filter to new PRs only
             new_prs = [pr for pr in prs if pr["azure_pr_id"] not in seen_ids]
 
