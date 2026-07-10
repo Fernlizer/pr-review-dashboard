@@ -1,9 +1,12 @@
-"""Auto-comment service — post review findings back to Azure DevOps PRs with dedup."""
+"""Auto-comment service — post review findings back to Azure DevOps PRs with dedup.
+
+Follows Azure DevOps REST API 7.1 spec for pull request threads.
+https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-request-threads/create
+"""
 
 import base64
 import json
 import logging
-import time
 from typing import List, Dict, Any, Optional, Set
 
 import httpx
@@ -11,12 +14,11 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-# Marker string to identify our auto-comments
 BOT_MARKER = "Auto-detected by PR Review Dashboard"
 
 
 class AzureDevOpsCommentClient:
-    """Post comments to Azure DevOps PRs."""
+    """Post comments to Azure DevOps PRs following the official API spec."""
 
     def __init__(self):
         self.pat = settings.AZURE_DEVOPS_PAT
@@ -27,6 +29,23 @@ class AzureDevOpsCommentClient:
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
+
+    async def get_latest_iteration(self, repo: str, pr_id: int) -> Optional[int]:
+        """Get the latest iteration ID for a PR."""
+        url = f"{self.base_url}/{repo}/pullrequests/{pr_id}/iterations?api-version=7.1"
+        async with httpx.AsyncClient(timeout=15) as client:
+            try:
+                resp = await client.get(url, headers=self.headers)
+                if resp.status_code == 200:
+                    text = resp.text
+                    if text.startswith("\ufeff"):
+                        text = text[1:]
+                    iterations = json.loads(text).get("value", [])
+                    if iterations:
+                        return iterations[-1]["id"]
+            except Exception as e:
+                logger.error(f"Failed to fetch iterations: {e}")
+        return None
 
     async def get_existing_threads(self, repo: str, pr_id: int) -> List[dict]:
         """Fetch all existing comment threads on a PR."""
@@ -46,25 +65,69 @@ class AzureDevOpsCommentClient:
     async def post_general_comment(self, repo: str, pr_id: int, message: str) -> Optional[dict]:
         """Post a general (non-inline) comment on a PR thread."""
         url = f"{self.base_url}/{repo}/pullrequests/{pr_id}/threads?api-version=7.1"
-        body = {"comments": [{"content": message}]}
+        body = {
+            "comments": [
+                {
+                    "parentCommentId": 0,
+                    "content": message,
+                    "commentType": 1,
+                }
+            ],
+            "status": 1,
+        }
         return await self._post_comment(url, body, f"general on PR #{pr_id}")
 
     async def post_inline_comment(
-        self, repo: str, pr_id: int, file_path: str, line_number: int, message: str
+        self,
+        repo: str,
+        pr_id: int,
+        file_path: str,
+        line_number: int,
+        message: str,
+        iteration_id: int = 1,
     ) -> Optional[dict]:
-        """Post an inline comment on a specific line in a PR."""
+        """
+        Post an inline comment on a specific line in a PR.
+        Follows the official Azure DevOps API spec with pullRequestThreadContext.
+        """
         # Azure DevOps requires leading / in filePath
         if not file_path.startswith("/"):
             file_path = "/" + file_path
 
         url = f"{self.base_url}/{repo}/pullrequests/{pr_id}/threads?api-version=7.1"
+
+        # Follow the official spec exactly
         body = {
-            "comments": [{"content": message}],
+            "comments": [
+                {
+                    "parentCommentId": 0,
+                    "content": message,
+                    "commentType": 1,
+                }
+            ],
+            "status": 1,
             "threadContext": {
                 "filePath": file_path,
-                "rightFileStart": {"line": line_number, "offset": 1},
+                "rightFileStart": {
+                    "line": line_number,
+                    "offset": 1,
+                },
+                "rightFileEnd": {
+                    "line": line_number,
+                    "offset": 1,
+                },
+                "leftFileStart": None,
+                "leftFileEnd": None,
+            },
+            "pullRequestThreadContext": {
+                "changeTrackingId": 1,
+                "iterationContext": {
+                    "firstComparingIteration": iteration_id,
+                    "secondComparingIteration": iteration_id,
+                },
             },
         }
+
         return await self._post_comment(
             url, body, f"inline {file_path}:{line_number} on PR #{pr_id}"
         )
@@ -81,7 +144,7 @@ class AzureDevOpsCommentClient:
                     logger.info(f"Comment posted: {desc}")
                     return json.loads(text)
                 else:
-                    logger.error(f"Comment failed ({desc}): {resp.status_code} {resp.text[:200]}")
+                    logger.error(f"Comment failed ({desc}): {resp.status_code} {resp.text[:300]}")
                     return None
             except Exception as e:
                 logger.error(f"Comment error ({desc}): {e}")
@@ -89,12 +152,7 @@ class AzureDevOpsCommentClient:
 
 
 def _build_existing_comment_keys(threads: List[dict]) -> Set[str]:
-    """
-    Build a set of keys from existing bot comments for dedup.
-    Keys format:
-      - "summary" for general summary comments
-      - "inline:{file}:{line}" for inline comments
-    """
+    """Build dedup keys from existing bot comments."""
     keys = set()
     for thread in threads:
         comments = thread.get("comments", [])
@@ -102,18 +160,15 @@ def _build_existing_comment_keys(threads: List[dict]) -> Set[str]:
             continue
 
         content = comments[0].get("content", "") or ""
-        # Only check our own bot comments
         if BOT_MARKER not in content:
             continue
 
         ctx = thread.get("threadContext") or {}
         if ctx.get("filePath"):
-            # Inline comment
             file_path = ctx.get("filePath", "")
             line = ctx.get("rightFileStart", {}).get("line", 0)
             keys.add(f"inline:{file_path}:{line}")
         else:
-            # General comment
             keys.add("summary")
 
     return keys
@@ -130,8 +185,6 @@ def format_summary_comment(
     scores: Dict[str, int],
     duration_seconds: int,
 ) -> str:
-    """Format a markdown summary comment for the PR."""
-
     rec_badges = {
         "approve": "✅ **Approved**",
         "request_changes": "🚫 **Request Changes**",
@@ -154,7 +207,7 @@ def format_summary_comment(
         score_lines.append(f"| {label} | {bar} | **{score}/10** |")
     score_table = "\n".join(score_lines)
 
-    comment = f"""## 🔍 PR Auto-Review Summary
+    return f"""## 🔍 PR Auto-Review Summary
 
 **Recommendation:** {rec_text}
 **Findings:** {severity_text}
@@ -170,21 +223,16 @@ def format_summary_comment(
 
 > 🤖 {BOT_MARKER}
 """
-    return comment
 
 
 def format_inline_comment(
     severity: str,
     category: str,
     owasp_tag: Optional[str],
-    file_path: str,
-    line_number: int,
     description: Optional[str],
     code_snippet: Optional[str],
     fix_suggestion: Optional[str],
 ) -> str:
-    """Format an inline comment for a specific finding."""
-
     severity_emoji = {"HIGH": "🔴", "MEDIUM": "🟡", "LOW": "🔵"}.get(severity, "⚪")
 
     lines = [f"{severity_emoji} **[{severity}] {category}**"]
@@ -214,13 +262,7 @@ async def auto_comment_on_review(
     scores: Dict[str, int],
     duration_seconds: int,
 ) -> Dict[str, Any]:
-    """
-    Post all comments for a completed review (with dedup).
-    1. Fetch existing threads to check for duplicates
-    2. Post summary comment if not already posted
-    3. Post inline comments for HIGH/MEDIUM findings if not already posted
-    Returns stats: {summary_posted, inline_posted, skipped, errors}
-    """
+    """Post all comments for a completed review (with dedup)."""
     client = AzureDevOpsCommentClient()
     stats = {"summary_posted": False, "inline_posted": 0, "skipped": 0, "errors": []}
 
@@ -228,12 +270,15 @@ async def auto_comment_on_review(
     medium_count = sum(1 for f in findings if f.get("severity") == "MEDIUM")
     low_count = sum(1 for f in findings if f.get("severity") == "LOW")
 
-    # 1. Fetch existing threads for dedup
+    # Fetch existing threads for dedup
     existing_threads = await client.get_existing_threads(repo, pr_id)
     existing_keys = _build_existing_comment_keys(existing_threads)
     logger.info(f"Found {len(existing_keys)} existing bot comments on PR #{pr_id}")
 
-    # 2. Post summary comment (skip if already exists)
+    # Get latest iteration ID for inline comments
+    iteration_id = await client.get_latest_iteration(repo, pr_id) or 1
+
+    # Post summary comment (skip if already exists)
     if "summary" in existing_keys:
         logger.info(f"Summary comment already exists on PR #{pr_id}, skipping")
         stats["skipped"] += 1
@@ -249,7 +294,7 @@ async def auto_comment_on_review(
         else:
             stats["errors"].append("Failed to post summary comment")
 
-    # 3. Post inline comments for HIGH and MEDIUM findings
+    # Post inline comments for HIGH and MEDIUM findings
     seen_lines = set()
     for finding in findings:
         severity = finding.get("severity", "LOW")
@@ -260,16 +305,13 @@ async def auto_comment_on_review(
         line_number = finding.get("line_number", 0)
         key = (file_path, line_number)
 
-        # Skip duplicates within this batch
         if key in seen_lines:
             continue
         seen_lines.add(key)
 
-        # Skip if no valid file path or line number
         if not file_path or not line_number or line_number < 1:
             continue
 
-        # Normalize file path for dedup check
         normalized_path = file_path if file_path.startswith("/") else f"/{file_path}"
         dedup_key = f"inline:{normalized_path}:{line_number}"
 
@@ -282,18 +324,17 @@ async def auto_comment_on_review(
             severity=severity,
             category=finding.get("category", "Issue"),
             owasp_tag=finding.get("owasp_tag"),
-            file_path=file_path,
-            line_number=line_number,
             description=finding.get("description"),
             code_snippet=finding.get("code_snippet"),
             fix_suggestion=finding.get("fix_suggestion"),
         )
 
-        # Small delay to avoid rate limiting
-        await _async_sleep(0.5)
+        import asyncio
+        await asyncio.sleep(0.5)
 
         result = await client.post_inline_comment(
-            repo, pr_id, file_path, line_number, comment_text
+            repo, pr_id, file_path, line_number, comment_text,
+            iteration_id=iteration_id,
         )
         if result:
             stats["inline_posted"] += 1
@@ -301,9 +342,3 @@ async def auto_comment_on_review(
             stats["errors"].append(f"Failed to comment on {normalized_path}:{line_number}")
 
     return stats
-
-
-async def _async_sleep(seconds: float):
-    """Async sleep wrapper."""
-    import asyncio
-    await asyncio.sleep(seconds)
