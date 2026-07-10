@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   Settings as SettingsIcon, Play, Pause, Clock, RefreshCw,
-  CheckCircle, XCircle, MessageSquare, Loader2, Info
+  CheckCircle, XCircle, MessageSquare, Loader2, Info, AlertTriangle
 } from 'lucide-react'
 
 function LoadingSkeleton() {
