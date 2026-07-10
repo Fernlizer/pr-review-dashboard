@@ -5,7 +5,7 @@ import logging
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import PullRequest, PollState, Review, Finding
@@ -57,8 +57,14 @@ async def poll_and_review(db: AsyncSession) -> Dict[str, Any]:
             seen_ids = set(json.loads(state.last_seen_pr_ids or "[]"))
             current_ids = {pr["azure_pr_id"] for pr in prs}
 
-            # First-run mode: create PR records but skip reviews
-            is_first_run = not seen_ids and state.last_poll_at is None
+            # First-run mode: only if NO poll_state existed before AND no PR records exist
+            # This prevents duplicate creation on container restart
+            existing_count = await db.execute(
+                select(func.count(PullRequest.id)).where(PullRequest.repo == repo)
+            )
+            has_existing_prs = (existing_count.scalar() or 0) > 0
+
+            is_first_run = not seen_ids and state.last_poll_at is None and not has_existing_prs
             if is_first_run:
                 state.last_poll_at = datetime.now(timezone.utc)
                 state.last_seen_pr_ids = json.dumps(list(current_ids))

@@ -1,21 +1,40 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, ExternalLink, Clock, Shield, AlertTriangle } from 'lucide-react'
+import {
+  ArrowLeft, ExternalLink, Clock, Shield, AlertTriangle,
+  CheckCircle, XCircle, MessageSquare, FileCode, Wrench,
+  Loader2, Play
+} from 'lucide-react'
+
+function LoadingSkeleton() {
+  return (
+    <div className="p-8 space-y-6 animate-fade-in">
+      <div className="flex items-center gap-4">
+        <div className="skeleton h-9 w-9 rounded-lg" />
+        <div className="space-y-2 flex-1">
+          <div className="skeleton h-5 w-32" />
+          <div className="skeleton h-7 w-96" />
+          <div className="skeleton h-4 w-64" />
+        </div>
+      </div>
+      <div className="bg-surface border border-surface-border rounded-xl p-6">
+        <div className="skeleton h-64 w-full" />
+      </div>
+    </div>
+  )
+}
 
 function PRDetail() {
   const { id } = useParams()
   const [pr, setPr] = useState(null)
   const [activeTab, setActiveTab] = useState('findings')
-  const [showDiff, setShowDiff] = useState(false)
   const [runningReview, setRunningReview] = useState(false)
 
   useEffect(() => {
     fetch(`/api/prs/${id}`).then(r => r.json()).then(setPr)
   }, [id])
 
-  if (!pr) {
-    return <div className="flex items-center justify-center h-full"><Clock className="w-6 h-6 animate-spin text-dark-400" /></div>
-  }
+  if (!pr) return <LoadingSkeleton />
 
   const review = pr.reviews?.[0]
   const findings = review?.findings || []
@@ -23,25 +42,47 @@ function PRDetail() {
   const mediumFindings = findings.filter(f => f.severity === 'MEDIUM')
   const lowFindings = findings.filter(f => f.severity === 'LOW')
 
+  const handleRunReview = async () => {
+    setRunningReview(true)
+    try {
+      const resp = await fetch(`/api/prs/${id}/review`, { method: 'POST' })
+      const data = await resp.json()
+      if (data.status === 'completed') window.location.reload()
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setRunningReview(false)
+    }
+  }
+
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-8 space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Link to="/prs" className="text-dark-400 hover:text-dark-200 transition-colors">
-          <ArrowLeft className="w-5 h-5" />
+      <div className="flex items-start gap-4">
+        <Link
+          to="/prs"
+          className="mt-1 w-9 h-9 rounded-lg border border-surface-border flex items-center justify-center text-dark-400 hover:text-dark-200 hover:border-dark-600 transition-all duration-150 flex-shrink-0"
+        >
+          <ArrowLeft className="w-4 h-4" />
         </Link>
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs px-2 py-0.5 rounded-md bg-dark-700 text-dark-300 font-mono">{pr.repo}</span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="text-[11px] px-2 py-0.5 rounded-md bg-dark-800 text-dark-400 font-mono border border-surface-border">
+              {pr.repo}
+            </span>
+            <span className="text-[11px] text-dark-500 font-mono">#{pr.azure_pr_id}</span>
             {pr.is_reviewer_required === 'yes' && (
-              <span className="text-xs px-2 py-0.5 rounded-md bg-red-500/20 text-red-400 border border-red-500/30">
+              <span className="text-[11px] px-2 py-0.5 rounded-md bg-red-500/10 text-red-400 font-medium">
                 Required Reviewer
               </span>
             )}
           </div>
-          <h2 className="text-xl font-bold text-dark-50">{pr.title}</h2>
-          <div className="flex items-center gap-4 mt-1 text-sm text-dark-400">
-            <span>👤 {pr.author}</span>
+          <h2 className="text-lg font-semibold text-dark-50 tracking-tight leading-snug">
+            {pr.title}
+          </h2>
+          <div className="flex items-center gap-3 mt-1.5 text-[13px] text-dark-400">
+            <span>{pr.author}</span>
+            <span className="text-dark-700">·</span>
             <span className="font-mono">{pr.source_branch} → {pr.target_branch}</span>
           </div>
         </div>
@@ -49,32 +90,45 @@ function PRDetail() {
           href={pr.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-2 px-4 py-2 bg-dark-800 hover:bg-dark-700 border border-dark-600 rounded-lg text-sm text-dark-200 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-surface-secondary border border-surface-border rounded-lg text-[13px] text-dark-300 hover:text-dark-100 transition-all duration-150 flex-shrink-0"
         >
-          <ExternalLink className="w-4 h-4" />
-          Open in Azure DevOps
+          <ExternalLink className="w-3.5 h-3.5" />
+          Azure DevOps
         </a>
       </div>
 
       {/* Review Summary */}
       {review && (
-        <div className="bg-dark-900 border border-dark-700 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-surface border border-surface-border rounded-xl p-6 animate-slide-up">
+          {/* Top bar */}
+          <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <RecommendationBadge rec={review.recommendation} />
-              <span className="text-dark-400 text-sm">
-                {review.duration_seconds}s • {findings.length} findings
+              <span className="text-[12px] text-dark-500">
+                {review.duration_seconds}s · {findings.length} finding{findings.length !== 1 ? 's' : ''}
               </span>
             </div>
-            <div className="flex items-center gap-4">
-              {highFindings.length > 0 && <span className="text-sm text-red-400">🔴 {highFindings.length} HIGH</span>}
-              {mediumFindings.length > 0 && <span className="text-sm text-yellow-400">🟡 {mediumFindings.length} MED</span>}
-              {lowFindings.length > 0 && <span className="text-sm text-blue-400">🔵 {lowFindings.length} LOW</span>}
+            <div className="flex items-center gap-2">
+              {highFindings.length > 0 && (
+                <span className="text-[11px] font-medium text-red-400 bg-red-500/10 px-2 py-1 rounded-md">
+                  {highFindings.length} HIGH
+                </span>
+              )}
+              {mediumFindings.length > 0 && (
+                <span className="text-[11px] font-medium text-amber-400 bg-amber-500/10 px-2 py-1 rounded-md">
+                  {mediumFindings.length} MED
+                </span>
+              )}
+              {lowFindings.length > 0 && (
+                <span className="text-[11px] font-medium text-blue-400 bg-blue-500/10 px-2 py-1 rounded-md">
+                  {lowFindings.length} LOW
+                </span>
+              )}
             </div>
           </div>
 
-          {/* Score Table */}
-          <div className="grid grid-cols-5 gap-3 mb-4">
+          {/* Score Cards */}
+          <div className="grid grid-cols-5 gap-3 mb-5">
             {[
               { label: 'Logic', score: review.score_logic },
               { label: 'Security', score: review.score_security },
@@ -82,140 +136,219 @@ function PRDetail() {
               { label: 'Style', score: review.score_style },
               { label: 'Architecture', score: review.score_architecture },
             ].map(({ label, score }) => (
-              <div key={label} className="text-center">
-                <ScoreCircle score={score} />
-                <p className="text-xs text-dark-400 mt-1">{label}</p>
-              </div>
+              <ScoreCard key={label} label={label} score={score} />
             ))}
           </div>
 
+          {/* Summary */}
           {review.summary && (
-            <p className="text-sm text-dark-300 bg-dark-800 rounded-lg p-3">{review.summary}</p>
+            <div className="bg-dark-800/50 border border-surface-border rounded-lg p-4">
+              <p className="text-[13px] text-dark-300 leading-relaxed">{review.summary}</p>
+            </div>
           )}
         </div>
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-dark-900 rounded-lg p-1 w-fit">
-        {['findings', 'diff'].map(tab => (
+      <div className="flex gap-1 bg-surface border border-surface-border rounded-lg p-1 w-fit">
+        {[
+          { id: 'findings', label: `Findings (${findings.length})` },
+          { id: 'diff', label: 'Diff' },
+        ].map(tab => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === tab ? 'bg-dark-700 text-dark-100' : 'text-dark-400 hover:text-dark-200'
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2 rounded-md text-[13px] font-medium transition-all duration-150 ${
+              activeTab === tab.id
+                ? 'bg-dark-800 text-dark-100 shadow-sm'
+                : 'text-dark-400 hover:text-dark-200'
             }`}
           >
-            {tab === 'findings' ? `Findings (${findings.length})` : 'Diff'}
+            {tab.label}
           </button>
         ))}
       </div>
 
       {/* Findings Tab */}
       {activeTab === 'findings' && (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {findings.length === 0 && review?.status === 'completed' ? (
-            <div className="bg-dark-900 border border-dark-700 rounded-xl p-12 text-center">
-              <Shield className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
-              <p className="text-dark-300">No findings — clean review!</p>
+            <div className="bg-surface border border-surface-border rounded-xl">
+              <div className="flex flex-col items-center justify-center py-16 px-8">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center mb-4">
+                  <Shield className="w-6 h-6 text-emerald-400" />
+                </div>
+                <p className="text-dark-200 font-medium text-sm">No findings — clean review</p>
+                <p className="text-dark-500 text-[13px] mt-1">This PR passed all security checks.</p>
+              </div>
             </div>
           ) : findings.length === 0 ? (
-            <div className="bg-dark-900 border border-dark-700 rounded-xl p-12 text-center">
-              <Clock className="w-12 h-12 text-dark-500 mx-auto mb-3" />
-              <p className="text-dark-300 mb-2">ยังไม่ได้ review</p>
-              <p className="text-dark-500 text-sm mb-4">PR นี้ถูกบันทึกโดยไม่ review (PR เก่า)</p>
-              <button
-                onClick={async () => {
-                  setRunningReview(true)
-                  try {
-                    const resp = await fetch(`/api/prs/${id}/review`, { method: 'POST' })
-                    const data = await resp.json()
-                    if (data.status === 'completed') {
-                      window.location.reload()
-                    }
-                  } catch (e) {
-                    console.error(e)
-                  } finally {
-                    setRunningReview(false)
-                  }
-                }}
-                disabled={runningReview}
-                className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors"
-              >
-                {runningReview ? '⏳ กำลัง review...' : '🔍 Run Review'}
-              </button>
+            <div className="bg-surface border border-surface-border rounded-xl">
+              <div className="flex flex-col items-center justify-center py-16 px-8">
+                <div className="w-14 h-14 rounded-2xl bg-dark-800 flex items-center justify-center mb-4">
+                  <Clock className="w-6 h-6 text-dark-500" />
+                </div>
+                <p className="text-dark-300 font-medium text-sm">Not yet reviewed</p>
+                <p className="text-dark-500 text-[13px] mt-1 mb-5 text-center max-w-xs">
+                  This PR was recorded without a review (old PR).
+                </p>
+                <button
+                  onClick={handleRunReview}
+                  disabled={runningReview}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-[13px] font-medium transition-all duration-150 active:scale-[0.98]"
+                >
+                  {runningReview ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Running review...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4" />
+                      Run Review
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           ) : (
-            findings.map(f => <FindingCard key={f.id} finding={f} />)
+            findings.map((f, i) => <FindingCard key={f.id} finding={f} index={i} />)
           )}
         </div>
       )}
 
       {/* Diff Tab */}
       {activeTab === 'diff' && review?.raw_diff && (
-        <div className="bg-dark-900 border border-dark-700 rounded-xl p-4 overflow-auto max-h-[600px]">
-          <pre className="text-xs font-mono text-dark-300 whitespace-pre-wrap">
-            {review.raw_diff.split('\n').map((line, i) => {
-              let color = 'text-dark-300'
-              if (line.startsWith('+')) color = 'text-emerald-400'
-              else if (line.startsWith('-')) color = 'text-red-400'
-              else if (line.startsWith('@@')) color = 'text-blue-400'
-              else if (line.startsWith('===')) color = 'text-yellow-400 font-bold'
-              return <div key={i} className={color}>{line}</div>
-            })}
-          </pre>
+        <div className="bg-surface border border-surface-border rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-surface-border flex items-center gap-2">
+            <FileCode className="w-4 h-4 text-dark-500" />
+            <span className="text-[12px] text-dark-400 font-medium">Raw Diff</span>
+          </div>
+          <div className="p-4 overflow-auto max-h-[600px]">
+            <pre className="text-[12px] font-mono text-dark-300 whitespace-pre-wrap leading-5">
+              {review.raw_diff.split('\n').map((line, i) => {
+                let cls = 'text-dark-400'
+                if (line.startsWith('+')) cls = 'text-emerald-400 bg-emerald-500/5'
+                else if (line.startsWith('-')) cls = 'text-red-400 bg-red-500/5'
+                else if (line.startsWith('@@')) cls = 'text-blue-400'
+                else if (line.startsWith('===')) cls = 'text-yellow-400 font-bold'
+                return <div key={i} className={`px-2 -mx-2 ${cls}`}>{line}</div>
+              })}
+            </pre>
+          </div>
         </div>
       )}
     </div>
   )
 }
 
-function FindingCard({ finding }) {
-  const severityStyles = {
-    HIGH: 'border-red-500/50 bg-red-500/5',
-    MEDIUM: 'border-yellow-500/50 bg-yellow-500/5',
-    LOW: 'border-blue-500/50 bg-blue-500/5',
-  }
-  const severityBadge = {
-    HIGH: 'bg-red-500/20 text-red-400',
-    MEDIUM: 'bg-yellow-500/20 text-yellow-400',
-    LOW: 'bg-blue-500/20 text-blue-400',
-  }
+function ScoreCard({ label, score }) {
+  const pct = score != null ? (score / 10) * 100 : 0
+  const circumference = 2 * Math.PI * 20
+  const offset = circumference - (pct / 100) * circumference
+
+  let color = '#ef4444' // red
+  if (score >= 8) color = '#10b981' // emerald
+  else if (score >= 5) color = '#f59e0b' // amber
 
   return (
-    <div className={`border rounded-xl p-5 ${severityStyles[finding.severity] || 'border-dark-700'}`}>
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <span className={`px-2 py-0.5 rounded-md text-xs font-bold ${severityBadge[finding.severity]}`}>
-            {finding.severity}
+    <div className="flex flex-col items-center gap-2 py-2">
+      <div className="relative w-14 h-14">
+        <svg className="w-14 h-14 -rotate-90" viewBox="0 0 48 48">
+          <circle cx="24" cy="24" r="20" fill="none" stroke="#1e293b" strokeWidth="3" />
+          <circle
+            cx="24" cy="24" r="20" fill="none"
+            stroke={color}
+            strokeWidth="3"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            strokeLinecap="round"
+            className="score-ring"
+          />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-[15px] font-bold text-dark-100">
+            {score ?? '–'}
           </span>
-          <span className="text-xs px-2 py-0.5 rounded-md bg-dark-700 text-dark-300">{finding.category}</span>
-          {finding.owasp_tag && (
-            <span className="text-xs text-dark-400">{finding.owasp_tag}</span>
-          )}
-          {finding.is_automated && (
-            <span className="text-xs px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-400">Auto</span>
-          )}
         </div>
       </div>
+      <span className="text-[11px] text-dark-500 font-medium">{label}</span>
+    </div>
+  )
+}
 
-      <div className="flex items-center gap-2 text-sm text-dark-300 mb-2 font-mono">
-        📄 {finding.file_path}:{finding.line_number}
+function FindingCard({ finding, index }) {
+  const severityConfig = {
+    HIGH: {
+      border: 'border-red-500/30',
+      bg: 'bg-red-500/5',
+      badge: 'bg-red-500/15 text-red-400',
+      icon: AlertTriangle,
+    },
+    MEDIUM: {
+      border: 'border-amber-500/30',
+      bg: 'bg-amber-500/5',
+      badge: 'bg-amber-500/15 text-amber-400',
+      icon: AlertTriangle,
+    },
+    LOW: {
+      border: 'border-blue-500/30',
+      bg: 'bg-blue-500/5',
+      badge: 'bg-blue-500/15 text-blue-400',
+      icon: AlertTriangle,
+    },
+  }
+  const sev = severityConfig[finding.severity] || severityConfig.LOW
+
+  return (
+    <div
+      className={`border ${sev.border} ${sev.bg} rounded-xl p-5 animate-slide-up`}
+      style={{ animationDelay: `${index * 50}ms` }}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-3">
+        <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wide ${sev.badge}`}>
+          {finding.severity}
+        </span>
+        <span className="text-[11px] px-2 py-0.5 rounded-md bg-dark-800 text-dark-400 border border-surface-border">
+          {finding.category}
+        </span>
+        {finding.owasp_tag && (
+          <span className="text-[11px] text-dark-500 font-mono">{finding.owasp_tag}</span>
+        )}
+        {finding.is_automated && (
+          <span className="text-[11px] px-2 py-0.5 rounded-md bg-violet-500/15 text-violet-400 font-medium">
+            Auto
+          </span>
+        )}
       </div>
 
+      {/* File path */}
+      <div className="flex items-center gap-2 text-[13px] text-dark-300 mb-2 font-mono">
+        <FileCode className="w-3.5 h-3.5 text-dark-500 flex-shrink-0" />
+        <span className="truncate">{finding.file_path}:{finding.line_number}</span>
+      </div>
+
+      {/* Description */}
       {finding.description && (
-        <p className="text-sm text-dark-300 mb-3">{finding.description}</p>
+        <p className="text-[13px] text-dark-300 mb-3 leading-relaxed">{finding.description}</p>
       )}
 
+      {/* Code snippet */}
       {finding.code_snippet && (
-        <div className="bg-dark-950 rounded-lg p-3 mb-3 overflow-x-auto">
-          <code className="text-xs text-dark-200 font-mono">{finding.code_snippet}</code>
+        <div className="bg-dark-950 border border-surface-border rounded-lg p-3 mb-3 overflow-x-auto">
+          <code className="text-[12px] text-dark-200 font-mono leading-5">{finding.code_snippet}</code>
         </div>
       )}
 
+      {/* Fix suggestion */}
       {finding.fix_suggestion && (
-        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3">
-          <p className="text-xs font-medium text-emerald-400 mb-1">💡 Fix Suggestion</p>
-          <p className="text-sm text-dark-200">{finding.fix_suggestion}</p>
+        <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3">
+          <div className="flex items-center gap-2 mb-1.5">
+            <Wrench className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wide">Fix Suggestion</span>
+          </div>
+          <p className="text-[13px] text-dark-200 leading-relaxed">{finding.fix_suggestion}</p>
         </div>
       )}
     </div>
@@ -223,27 +356,19 @@ function FindingCard({ finding }) {
 }
 
 function RecommendationBadge({ rec }) {
-  const styles = {
-    approve: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-    request_changes: 'bg-red-500/20 text-red-400 border-red-500/30',
-    comment: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+  const config = {
+    approve: { bg: 'bg-emerald-500/15', text: 'text-emerald-400', icon: CheckCircle, label: 'Approve' },
+    request_changes: { bg: 'bg-red-500/15', text: 'text-red-400', icon: XCircle, label: 'Request Changes' },
+    comment: { bg: 'bg-amber-500/15', text: 'text-amber-400', icon: MessageSquare, label: 'Comment' },
   }
-  const labels = {
-    approve: '✅ Approve',
-    request_changes: '🚫 Request Changes',
-    comment: '💬 Comment',
-  }
-  return (
-    <span className={`px-3 py-1.5 rounded-lg text-sm font-medium border ${styles[rec] || 'bg-dark-700 text-dark-300'}`}>
-      {labels[rec] || rec}
-    </span>
-  )
-}
+  const c = config[rec] || { bg: 'bg-dark-700', text: 'text-dark-300', icon: MessageSquare, label: rec }
+  const Icon = c.icon
 
-function ScoreCircle({ score }) {
-  const color = score >= 8 ? 'text-emerald-400' : score >= 5 ? 'text-yellow-400' : 'text-red-400'
   return (
-    <span className={`text-2xl font-bold ${color}`}>{score ?? '-'}</span>
+    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium ${c.bg} ${c.text}`}>
+      <Icon className="w-3.5 h-3.5" />
+      {c.label}
+    </span>
   )
 }
 
