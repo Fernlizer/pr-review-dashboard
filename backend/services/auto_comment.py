@@ -14,7 +14,9 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-BOT_MARKER = "Auto-detected by PR Review Dashboard"
+# Hidden dedup marker (invisible zero-width space sequence)
+# Used internally to identify our comments without showing anything to users
+_DEDUP_ID = "\u200b\u200b\u200b"  # triple zero-width space
 
 
 class AzureDevOpsCommentClient:
@@ -86,17 +88,11 @@ class AzureDevOpsCommentClient:
         message: str,
         iteration_id: int = 1,
     ) -> Optional[dict]:
-        """
-        Post an inline comment on a specific line in a PR.
-        Follows the official Azure DevOps API spec with pullRequestThreadContext.
-        """
-        # Azure DevOps requires leading / in filePath
+        """Post an inline comment on a specific line in a PR."""
         if not file_path.startswith("/"):
             file_path = "/" + file_path
 
         url = f"{self.base_url}/{repo}/pullrequests/{pr_id}/threads?api-version=7.1"
-
-        # Follow the official spec exactly
         body = {
             "comments": [
                 {
@@ -108,14 +104,8 @@ class AzureDevOpsCommentClient:
             "status": 1,
             "threadContext": {
                 "filePath": file_path,
-                "rightFileStart": {
-                    "line": line_number,
-                    "offset": 1,
-                },
-                "rightFileEnd": {
-                    "line": line_number,
-                    "offset": 1,
-                },
+                "rightFileStart": {"line": line_number, "offset": 1},
+                "rightFileEnd": {"line": line_number, "offset": 1},
                 "leftFileStart": None,
                 "leftFileEnd": None,
             },
@@ -152,7 +142,7 @@ class AzureDevOpsCommentClient:
 
 
 def _build_existing_comment_keys(threads: List[dict]) -> Set[str]:
-    """Build dedup keys from existing bot comments."""
+    """Build dedup keys from existing bot comments using hidden marker."""
     keys = set()
     for thread in threads:
         comments = thread.get("comments", [])
@@ -160,7 +150,8 @@ def _build_existing_comment_keys(threads: List[dict]) -> Set[str]:
             continue
 
         content = comments[0].get("content", "") or ""
-        if BOT_MARKER not in content:
+        # Check for our hidden dedup marker
+        if _DEDUP_ID not in content:
             continue
 
         ctx = thread.get("threadContext") or {}
@@ -207,7 +198,7 @@ def format_summary_comment(
         score_lines.append(f"| {label} | {bar} | **{score}/10** |")
     score_table = "\n".join(score_lines)
 
-    return f"""## 🔍 PR Auto-Review Summary
+    return f"""## 🔍 PR Review Summary
 
 **Recommendation:** {rec_text}
 **Findings:** {severity_text}
@@ -218,11 +209,7 @@ def format_summary_comment(
 | Category | Score | Value |
 |----------|-------|-------|
 {score_table}
-
----
-
-> 🤖 {BOT_MARKER}
-"""
+{_DEDUP_ID}"""
 
 
 def format_inline_comment(
@@ -248,7 +235,8 @@ def format_inline_comment(
     if fix_suggestion:
         lines.append(f"\n💡 **Fix:** {fix_suggestion}")
 
-    lines.append(f"\n---\n🤖 *{BOT_MARKER}*")
+    # Hidden dedup marker at end
+    lines.append(f"\n{_DEDUP_ID}")
 
     return "\n".join(lines)
 
@@ -270,15 +258,13 @@ async def auto_comment_on_review(
     medium_count = sum(1 for f in findings if f.get("severity") == "MEDIUM")
     low_count = sum(1 for f in findings if f.get("severity") == "LOW")
 
-    # Fetch existing threads for dedup
     existing_threads = await client.get_existing_threads(repo, pr_id)
     existing_keys = _build_existing_comment_keys(existing_threads)
     logger.info(f"Found {len(existing_keys)} existing bot comments on PR #{pr_id}")
 
-    # Get latest iteration ID for inline comments
     iteration_id = await client.get_latest_iteration(repo, pr_id) or 1
 
-    # Post summary comment (skip if already exists)
+    # Summary
     if "summary" in existing_keys:
         logger.info(f"Summary comment already exists on PR #{pr_id}, skipping")
         stats["skipped"] += 1
@@ -294,7 +280,7 @@ async def auto_comment_on_review(
         else:
             stats["errors"].append("Failed to post summary comment")
 
-    # Post inline comments for HIGH and MEDIUM findings
+    # Inline comments
     seen_lines = set()
     for finding in findings:
         severity = finding.get("severity", "LOW")
