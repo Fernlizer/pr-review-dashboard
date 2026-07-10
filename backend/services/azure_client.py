@@ -139,7 +139,22 @@ class AzureDevOpsClient:
             f"&api-version=7.1-preview.1"
             f"&includeContent=true"
         )
-        return await self._get_raw(url)
+        # Override Accept header to get raw text, not JSON wrapper
+        raw_headers = {**self.headers, "Accept": "text/plain"}
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(url, headers=raw_headers)
+            if resp.status_code == 404:
+                return None
+            resp.raise_for_status()
+            text = resp.text
+            if text.startswith("\ufeff"):
+                text = text[1:]
+            # Validate: skip JSON metadata
+            if text.startswith("{") and '"objectId"' in text[:200]:
+                logger.warning(f"Got metadata instead of file content: {path} @ {branch}")
+                return None
+            logger.info(f"File fetched: {path} @ {branch} ({len(text)} bytes)")
+            return text
 
     async def fetch_files_parallel(
         self, repo: str, files: List[dict], source_branch: str, target_branch: str
