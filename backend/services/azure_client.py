@@ -53,6 +53,11 @@ class AzureDevOpsClient:
             text = resp.text
             if text.startswith("\ufeff"):
                 text = text[1:]
+            # Validate: Azure DevOps sometimes returns JSON metadata instead of file content
+            # when the branch/commit doesn't exist or the file is too large
+            if text.startswith("{") and '"objectId"' in text[:200]:
+                logger.warning(f"Got metadata instead of file content, skipping: {url[:100]}")
+                return None
             return text
 
     async def get_prs_for_reviewer(self, repo: str, reviewer_name: str) -> List[Dict[str, Any]]:

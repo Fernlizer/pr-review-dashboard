@@ -1,15 +1,18 @@
-"""Auto-comment service — post review findings back to Azure DevOps PRs."""
+"""Auto-comment service — post review findings back to Azure DevOps PRs with dedup."""
 
 import base64
 import json
 import logging
 import time
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Set
 
 import httpx
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+# Marker string to identify our auto-comments
+BOT_MARKER = "Auto-detected by PR Review Dashboard"
 
 
 class AzureDevOpsCommentClient:
@@ -24,6 +27,21 @@ class AzureDevOpsCommentClient:
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
+
+    async def get_existing_threads(self, repo: str, pr_id: int) -> List[dict]:
+        """Fetch all existing comment threads on a PR."""
+        url = f"{self.base_url}/{repo}/pullrequests/{pr_id}/threads?api-version=7.1"
+        async with httpx.AsyncClient(timeout=15) as client:
+            try:
+                resp = await client.get(url, headers=self.headers)
+                if resp.status_code == 200:
+                    text = resp.text
+                    if text.startswith("\ufeff"):
+                        text = text[1:]
+                    return json.loads(text).get("value", [])
+            except Exception as e:
+                logger.error(f"Failed to fetch threads: {e}")
+        return []
 
     async def post_general_comment(self, repo: str, pr_id: int, message: str) -> Optional[dict]:
         """Post a general (non-inline) comment on a PR thread."""
@@ -70,6 +88,37 @@ class AzureDevOpsCommentClient:
                 return None
 
 
+def _build_existing_comment_keys(threads: List[dict]) -> Set[str]:
+    """
+    Build a set of keys from existing bot comments for dedup.
+    Keys format:
+      - "summary" for general summary comments
+      - "inline:{file}:{line}" for inline comments
+    """
+    keys = set()
+    for thread in threads:
+        comments = thread.get("comments", [])
+        if not comments:
+            continue
+
+        content = comments[0].get("content", "") or ""
+        # Only check our own bot comments
+        if BOT_MARKER not in content:
+            continue
+
+        ctx = thread.get("threadContext") or {}
+        if ctx.get("filePath"):
+            # Inline comment
+            file_path = ctx.get("filePath", "")
+            line = ctx.get("rightFileStart", {}).get("line", 0)
+            keys.add(f"inline:{file_path}:{line}")
+        else:
+            # General comment
+            keys.add("summary")
+
+    return keys
+
+
 def format_summary_comment(
     repo: str,
     pr_id: int,
@@ -83,7 +132,6 @@ def format_summary_comment(
 ) -> str:
     """Format a markdown summary comment for the PR."""
 
-    # Recommendation badge
     rec_badges = {
         "approve": "✅ **Approved**",
         "request_changes": "🚫 **Request Changes**",
@@ -91,7 +139,6 @@ def format_summary_comment(
     }
     rec_text = rec_badges.get(recommendation, recommendation)
 
-    # Severity emoji
     parts = []
     if high_count > 0:
         parts.append(f"🔴 {high_count} HIGH")
@@ -101,7 +148,6 @@ def format_summary_comment(
         parts.append(f"🔵 {low_count} LOW")
     severity_text = " | ".join(parts) if parts else "🟢 No issues found"
 
-    # Score table
     score_lines = []
     for label, score in scores.items():
         bar = "█" * score + "░" * (10 - score)
@@ -122,7 +168,7 @@ def format_summary_comment(
 
 ---
 
-> 🤖 Auto-reviewed by **PR Review Dashboard** | [Open Dashboard](http://localhost:9101/prs)
+> 🤖 {BOT_MARKER}
 """
     return comment
 
@@ -154,7 +200,7 @@ def format_inline_comment(
     if fix_suggestion:
         lines.append(f"\n💡 **Fix:** {fix_suggestion}")
 
-    lines.append(f"\n---\n🤖 *Auto-detected by PR Review Dashboard*")
+    lines.append(f"\n---\n🤖 *{BOT_MARKER}*")
 
     return "\n".join(lines)
 
@@ -169,32 +215,41 @@ async def auto_comment_on_review(
     duration_seconds: int,
 ) -> Dict[str, Any]:
     """
-    Post all comments for a completed review.
-    1. Post summary comment (general thread)
-    2. Post inline comments for HIGH/MEDIUM findings
-    Returns stats: {summary_posted, inline_posted, errors}
+    Post all comments for a completed review (with dedup).
+    1. Fetch existing threads to check for duplicates
+    2. Post summary comment if not already posted
+    3. Post inline comments for HIGH/MEDIUM findings if not already posted
+    Returns stats: {summary_posted, inline_posted, skipped, errors}
     """
     client = AzureDevOpsCommentClient()
-    stats = {"summary_posted": False, "inline_posted": 0, "errors": []}
+    stats = {"summary_posted": False, "inline_posted": 0, "skipped": 0, "errors": []}
 
     high_count = sum(1 for f in findings if f.get("severity") == "HIGH")
     medium_count = sum(1 for f in findings if f.get("severity") == "MEDIUM")
     low_count = sum(1 for f in findings if f.get("severity") == "LOW")
 
-    # 1. Post summary comment
-    summary_text = format_summary_comment(
-        repo, pr_id, title, recommendation,
-        high_count, medium_count, low_count,
-        scores, duration_seconds,
-    )
-    result = await client.post_general_comment(repo, pr_id, summary_text)
-    if result:
-        stats["summary_posted"] = True
-    else:
-        stats["errors"].append("Failed to post summary comment")
+    # 1. Fetch existing threads for dedup
+    existing_threads = await client.get_existing_threads(repo, pr_id)
+    existing_keys = _build_existing_comment_keys(existing_threads)
+    logger.info(f"Found {len(existing_keys)} existing bot comments on PR #{pr_id}")
 
-    # 2. Post inline comments for HIGH and MEDIUM findings only
-    # Group by file+line to avoid duplicate comments
+    # 2. Post summary comment (skip if already exists)
+    if "summary" in existing_keys:
+        logger.info(f"Summary comment already exists on PR #{pr_id}, skipping")
+        stats["skipped"] += 1
+    else:
+        summary_text = format_summary_comment(
+            repo, pr_id, title, recommendation,
+            high_count, medium_count, low_count,
+            scores, duration_seconds,
+        )
+        result = await client.post_general_comment(repo, pr_id, summary_text)
+        if result:
+            stats["summary_posted"] = True
+        else:
+            stats["errors"].append("Failed to post summary comment")
+
+    # 3. Post inline comments for HIGH and MEDIUM findings
     seen_lines = set()
     for finding in findings:
         severity = finding.get("severity", "LOW")
@@ -205,12 +260,22 @@ async def auto_comment_on_review(
         line_number = finding.get("line_number", 0)
         key = (file_path, line_number)
 
+        # Skip duplicates within this batch
         if key in seen_lines:
             continue
         seen_lines.add(key)
 
         # Skip if no valid file path or line number
         if not file_path or not line_number or line_number < 1:
+            continue
+
+        # Normalize file path for dedup check
+        normalized_path = file_path if file_path.startswith("/") else f"/{file_path}"
+        dedup_key = f"inline:{normalized_path}:{line_number}"
+
+        if dedup_key in existing_keys:
+            logger.info(f"Inline comment already exists at {normalized_path}:{line_number}, skipping")
+            stats["skipped"] += 1
             continue
 
         comment_text = format_inline_comment(
@@ -233,7 +298,7 @@ async def auto_comment_on_review(
         if result:
             stats["inline_posted"] += 1
         else:
-            stats["errors"].append(f"Failed to comment on {file_path}:{line_number}")
+            stats["errors"].append(f"Failed to comment on {normalized_path}:{line_number}")
 
     return stats
 
