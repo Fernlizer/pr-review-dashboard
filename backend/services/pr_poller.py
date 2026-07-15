@@ -214,7 +214,7 @@ async def _process_new_pr(
 
     review.raw_diff = "\n".join(all_diffs)
 
-    # Security scan
+    # Security scan (grep patterns + semgrep)
     security_findings = run_security_scan(files_content)
     review.security_scan_json = json.dumps([
         {
@@ -229,11 +229,41 @@ async def _process_new_pr(
         for f in security_findings
     ])
 
-    # Create Finding records for security findings
+    # LLM review (deep code analysis)
+    llm_findings = []
+    try:
+        from services.llm_reviewer import review_pr_with_llm
+        logger.info(f"Starting LLM review for PR #{pr_data['azure_pr_id']}...")
+        llm_findings = await review_pr_with_llm(
+            title=str(pr.title or ""),
+            author=str(pr.author or ""),
+            source_branch=str(pr_data["source_branch"]),
+            target_branch=str(pr_data["target_branch"]),
+            files=[
+                {
+                    "path": str(ff.path),
+                    "change_type": str(ff.change_type),
+                    "src_content": str(ff.src_content or ""),
+                }
+                for ff in fetched_files
+                if ff.src_content
+            ],
+        )
+        logger.info(f"LLM review found {len(llm_findings)} findings")
+    except Exception as e:
+        logger.error(f"LLM review failed (continuing with security scan only): {type(e).__name__}: {e}")
+        llm_findings = []
+
+    # Create Finding records — merge security scan + LLM findings
     high_count = 0
     medium_count = 0
     low_count = 0
+    seen_keys = set()  # dedup security + LLM findings on same file:line
+
+    # Security findings first
     for sf in security_findings:
+        key = (sf.file, sf.line)
+        seen_keys.add(key)
         finding = Finding(
             review_id=review.id,
             severity=sf.severity,
@@ -254,17 +284,49 @@ async def _process_new_pr(
         else:
             low_count += 1
 
-    # Set review scores based on security scan
+    # LLM findings (skip if same file:line already covered by security scan)
+    for lf in llm_findings:
+        key = (lf.file_path, lf.line_number)
+        if key in seen_keys:
+            continue  # security scan already found something here
+        seen_keys.add(key)
+
+        finding = Finding(
+            review_id=review.id,
+            severity=lf.severity,
+            category=lf.category,
+            owasp_tag=lf.owasp_tag,
+            file_path=lf.file_path,
+            line_number=lf.line_number,
+            function_name=lf.function_name,
+            description=lf.description,
+            code_snippet=lf.code_snippet,
+            fix_suggestion=lf.fix_suggestion,
+            is_automated=True,
+        )
+        db.add(finding)
+        if lf.severity == "HIGH":
+            high_count += 1
+        elif lf.severity == "MEDIUM":
+            medium_count += 1
+        else:
+            low_count += 1
+
+    # Set review scores based on all findings
     review.score_security = max(10 - high_count * 3 - medium_count, 1) if (high_count + medium_count) > 0 else 10
-    review.score_logic = 7  # Default — LLM review would refine this
-    review.score_tests = 5  # Default
-    review.score_style = 7  # Default
-    review.score_architecture = 7  # Default
+    # LLM findings refine logic/test/arch scores
+    logic_issues = sum(1 for f in llm_findings if f.category in ("BUG", "Issue"))
+    test_issues = sum(1 for f in llm_findings if f.category == "Test")
+    arch_issues = sum(1 for f in llm_findings if f.category == "Architecture")
+    review.score_logic = max(10 - logic_issues * 2, 1) if logic_issues > 0 else 9
+    review.score_tests = max(10 - test_issues * 2, 1) if test_issues > 0 else 7
+    review.score_style = 7
+    review.score_architecture = max(10 - arch_issues * 2, 1) if arch_issues > 0 else 8
 
     # Set recommendation
     if high_count > 0:
         review.recommendation = "request_changes"
-        review.summary = f"🔴 Security scan found {high_count} HIGH, {medium_count} MEDIUM, {low_count} LOW issues."
+        review.summary = f"🔴 Found {high_count} HIGH, {medium_count} MEDIUM, {low_count} LOW issues ({len(security_findings)} security + {len(llm_findings)} LLM)."
     elif medium_count > 0:
         review.recommendation = "comment"
         review.summary = f"🟡 Security scan found {medium_count} MEDIUM, {low_count} LOW issues."
