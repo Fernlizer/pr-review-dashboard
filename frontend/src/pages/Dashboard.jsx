@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
   GitPullRequest, FileSearch, AlertTriangle, Flame,
-  CheckCircle, XCircle, MessageSquare, ArrowUpRight
+  CheckCircle, XCircle, MessageSquare, ArrowUpRight,
+  Loader2, Search
 } from 'lucide-react'
 
 /* ── Card base ───────────────────────────────────────────────────── */
@@ -182,11 +183,38 @@ function RecommendationBadge({ rec }) {
 function Dashboard() {
   const [stats, setStats] = useState(null)
   const [recentReviews, setRecentReviews] = useState([])
+  const [prUrl, setPrUrl] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [submitResult, setSubmitResult] = useState(null)
 
   useEffect(() => {
     fetch('/api/stats').then(r => r.json()).then(setStats)
     fetch('/api/reviews?limit=10').then(r => r.json()).then(d => setRecentReviews(d.reviews || []))
   }, [])
+
+  const handleSubmitUrl = async () => {
+    if (!prUrl.trim()) return
+    setSubmitting(true)
+    setSubmitResult(null)
+    try {
+      const resp = await fetch('/api/prs/submit-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: prUrl.trim() }),
+      })
+      const data = await resp.json()
+      if (!resp.ok) {
+        setSubmitResult({ error: data.detail || 'Failed' })
+      } else {
+        setSubmitResult(data)
+        setPrUrl('')
+      }
+    } catch (e) {
+      setSubmitResult({ error: e.message })
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   if (!stats) return <LoadingSkeleton />
 
@@ -205,6 +233,58 @@ function Dashboard() {
         <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-3)', marginTop: 4 }}>
           Automated PR security review overview
         </p>
+      </div>
+
+      {/* Submit PR URL */}
+      <div className="reveal" style={{ '--i': 0.5, background: 'var(--color-paper-2)', border: '1px solid var(--color-rule)', borderRadius: 'var(--radius-card)', padding: 'var(--space-md)' }}>
+        <label style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-ink)', display: 'block', marginBottom: 'var(--space-2xs)' }}>
+          Submit PR for Review
+        </label>
+        <div style={{ display: 'flex', gap: 'var(--space-xs)' }}>
+          <input
+            type="url"
+            value={prUrl}
+            onChange={e => setPrUrl(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSubmitUrl()}
+            placeholder="https://dev.azure.com/.../pullrequest/12345"
+            style={{
+              flex: 1, padding: 'var(--space-2xs) var(--space-sm)',
+              background: 'var(--color-paper)', color: 'var(--color-ink)',
+              border: '1px solid var(--color-rule)', borderRadius: 'var(--radius-input)',
+              fontSize: 'var(--text-sm)', fontFamily: 'var(--font-mono)',
+              outline: 'none',
+            }}
+          />
+          <button
+            onClick={handleSubmitUrl}
+            disabled={submitting || !prUrl.trim()}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 'var(--space-2xs)',
+              padding: 'var(--space-2xs) var(--space-md)',
+              background: 'var(--color-accent)', color: 'var(--color-accent-ink)',
+              border: 'none', borderRadius: 'var(--radius-input)',
+              fontSize: 'var(--text-sm)', fontWeight: 600, cursor: 'pointer',
+              opacity: (submitting || !prUrl.trim()) ? 0.5 : 1,
+            }}
+          >
+            {submitting ? <Loader2 className="w-4 h-4" style={{ animation: 'spin 1s linear infinite' }} /> : <Search className="w-4 h-4" />}
+            Review
+          </button>
+        </div>
+        {submitResult && (
+          <div style={{
+            marginTop: 'var(--space-xs)', padding: 'var(--space-2xs) var(--space-sm)',
+            borderRadius: 'var(--radius-input)', fontSize: 'var(--text-sm)',
+            background: submitResult.error ? 'rgba(255,80,80,0.1)' : 'rgba(80,200,120,0.1)',
+            border: `1px solid ${submitResult.error ? 'rgba(255,80,80,0.2)' : 'rgba(80,200,120,0.2)'}`,
+            color: 'var(--color-ink)',
+          }}>
+            {submitResult.error
+              ? `❌ ${submitResult.error}`
+              : `✅ ${submitResult.message} (${submitResult.repo} #${submitResult.pr_id})`
+            }
+          </div>
+        )}
       </div>
 
       {/* Stat Cards */}

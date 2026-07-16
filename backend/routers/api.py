@@ -1,7 +1,7 @@
 """API endpoints for PRs, reviews, findings, and stats."""
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, HTTPException, Request
+from fastapi import APIRouter, Depends, Query, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -458,6 +458,134 @@ async def disable_auto_comment(db: AsyncSession = Depends(get_db)):
     await _set_config_value(db, "auto_comment_enabled", "false")
     logger.info("Auto-comment disabled")
     return {"status": "disabled", "message": "Auto-comment is now OFF. Reviews will not post comments."}
+
+
+# --- Submit PR URL for Review ---
+
+class SubmitPRUrlRequest(BaseModel):
+    url: str = Field(description="Azure DevOps PR URL", examples=[
+        "https://dev.azure.com/AXONS-FIT-Business-and-CPTG/AgriTech/_git/purchase/pullrequest/33762"
+    ])
+
+
+@router.post("/prs/submit-url", response_model=dict)
+async def submit_pr_url(
+    body: SubmitPRUrlRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """Submit a PR URL for review — even if user is not assigned as reviewer."""
+    import re
+
+    url = body.url.strip()
+
+    # Parse Azure DevOps PR URL
+    # Pattern: https://dev.azure.com/{org}/{project}/_git/{repo}/pullrequest/{pr_id}
+    pattern = r"https://dev\.azure\.com/([^/]+)/([^/]+)/_git/([^/]+)/pullrequest/(\d+)"
+    match = re.match(pattern, url)
+
+    if not match:
+        raise HTTPException(400, "Invalid Azure DevOps PR URL. Expected: https://dev.azure.com/{org}/{project}/_git/{repo}/pullrequest/{id}")
+
+    org, project, repo, pr_id = match.groups()
+    azure_pr_id = int(pr_id)
+
+    # Check if already exists
+    existing = await db.execute(
+        select(PullRequest).where(
+            PullRequest.azure_pr_id == azure_pr_id,
+            PullRequest.repo == repo,
+        )
+    )
+    existing_pr = existing.scalar_one_or_none()
+
+    if existing_pr:
+        # Already tracked — run review on latest
+        background_tasks.add_task(run_single_review, existing_pr.id)
+        return {
+            "status": "existing",
+            "pr_id": existing_pr.id,
+            "message": f"PR #{azure_pr_id} already tracked. Running review...",
+            "url": url,
+        }
+
+    # Fetch PR details from Azure DevOps
+    from services.azure_client import AzureDevOpsClient
+    client = AzureDevOpsClient()
+
+    try:
+        # Get PR details
+        pr_url = f"{client.base_url}/_apis/git/repositories/{repo}/pullrequests/{azure_pr_id}?api-version=7.1"
+        pr_data = await client._get(pr_url)
+    except Exception as e:
+        raise HTTPException(404, f"Could not fetch PR #{azure_pr_id} from repo '{repo}': {e}")
+
+    if not pr_data:
+        raise HTTPException(404, f"PR #{azure_pr_id} not found in repo '{repo}'")
+
+    # Create PR record
+    pr = PullRequest(
+        azure_pr_id=azure_pr_id,
+        repo=repo,
+        title=pr_data.get("title", ""),
+        author=pr_data.get("createdBy", {}).get("displayName", ""),
+        source_branch=pr_data.get("sourceRefName", "").replace("refs/heads/", ""),
+        target_branch=pr_data.get("targetRefName", "").replace("refs/heads/", ""),
+        status=pr_data.get("status", "active").lower(),
+        is_reviewer_required=False,
+        azure_created_at=_parse_date(pr_data.get("creationDate", "")),
+        url=url,
+    )
+    db.add(pr)
+    await db.commit()
+    await db.refresh(pr)
+
+    # Run review in background
+    background_tasks.add_task(run_single_review, pr.id)
+
+    return {
+        "status": "added",
+        "pr_id": pr.id,
+        "message": f"PR #{azure_pr_id} added to system. Running review...",
+        "url": url,
+        "title": pr.title,
+        "author": pr.author,
+        "repo": repo,
+    }
+
+
+async def run_single_review(pr_id: int):
+    """Run review for a single PR in background."""
+    from services.pr_poller import _process_new_pr
+    from services.azure_client import AzureDevOpsClient
+    from database import async_session
+
+    async with async_session() as db:
+        try:
+            result = await db.execute(
+                select(PullRequest).where(PullRequest.id == pr_id)
+            )
+            pr = result.scalar_one_or_none()
+            if not pr:
+                return
+
+            client = AzureDevOpsClient()
+            pr_data = {
+                "azure_pr_id": pr.azure_pr_id,
+                "title": pr.title,
+                "description": pr.description or "",
+                "author": pr.author or "",
+                "author_email": pr.author_email or "",
+                "source_branch": pr.source_branch or "",
+                "target_branch": pr.target_branch or "",
+                "status": pr.status or "active",
+                "is_reviewer_required": "no",
+                "reviewers_json": "[]",
+            }
+            await _process_new_pr(db, client, str(pr.repo), pr_data)
+            logger.info(f"Background review completed for PR#{pr_id}")
+        except Exception as e:
+            logger.error(f"Background review failed for PR#{pr_id}: {e}")
 
 
 # --- Comment Selected Findings ---
