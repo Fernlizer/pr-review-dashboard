@@ -460,6 +460,102 @@ async def disable_auto_comment(db: AsyncSession = Depends(get_db)):
     return {"status": "disabled", "message": "Auto-comment is now OFF. Reviews will not post comments."}
 
 
+# --- Comment Selected Findings ---
+
+class CommentSelectedRequest(BaseModel):
+    finding_ids: List[int] = Field(description="List of finding IDs to comment on")
+
+
+class CommentSelectedResponse(BaseModel):
+    posted: int
+    skipped: int
+    errors: List[str]
+
+
+@router.post("/reviews/{review_id}/comment-selected", response_model=CommentSelectedResponse)
+async def comment_selected_findings(
+    review_id: int,
+    body: CommentSelectedRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Post inline comments for selected findings on the PR."""
+    from services.auto_comment import AzureDevOpsCommentClient, format_inline_comment
+
+    # Get review with PR info
+    result = await db.execute(
+        select(Review)
+        .options(selectinload(Review.findings), selectinload(Review.pull_request))
+        .where(Review.id == review_id)
+    )
+    review = result.scalar_one_or_none()
+    if not review:
+        raise HTTPException(404, "Review not found")
+    if not review.pull_request:
+        raise HTTPException(404, "PR not found for this review")
+
+    pr = review.pull_request
+    client = AzureDevOpsCommentClient()
+
+    # Get latest iteration for inline comments
+    iteration_id = await client.get_latest_iteration(pr.repo, pr.azure_pr_id) or 1
+
+    # Get existing threads for dedup
+    existing_threads = await client.get_existing_threads(pr.repo, pr.azure_pr_id)
+    from services.auto_comment import _build_existing_comment_keys
+    existing_keys = _build_existing_comment_keys(existing_threads)
+
+    # Filter to selected findings
+    selected = [f for f in review.findings if f.id in body.finding_ids]
+    if not selected:
+        raise HTTPException(400, "No valid finding IDs provided")
+
+    posted = 0
+    skipped = 0
+    errors = []
+
+    for finding in selected:
+        # Normalize path
+        file_path = finding.file_path or ""
+        if not file_path.startswith("/"):
+            file_path = "/" + file_path
+
+        # Dedup check
+        dedup_key = f"inline:{file_path}:{finding.line_number}"
+        if dedup_key in existing_keys:
+            skipped += 1
+            continue
+
+        # Format comment
+        comment_text = format_inline_comment(
+            severity=finding.severity,
+            category=finding.category,
+            owasp_tag=finding.owasp_tag,
+            description=finding.description,
+            code_snippet=finding.code_snippet,
+            fix_suggestion=finding.fix_suggestion,
+        )
+
+        # Post
+        import asyncio
+        await asyncio.sleep(0.5)
+
+        result = await client.post_inline_comment(
+            repo=pr.repo,
+            pr_id=pr.azure_pr_id,
+            file_path=finding.file_path,
+            line_number=finding.line_number,
+            message=comment_text,
+            iteration_id=iteration_id,
+        )
+        if result:
+            posted += 1
+            existing_keys.add(dedup_key)
+        else:
+            errors.append(f"Failed: {file_path}:{finding.line_number}")
+
+    return CommentSelectedResponse(posted=posted, skipped=skipped, errors=errors)
+
+
 # --- Helpers ---
 
 def _review_summary(review: Review) -> dict:

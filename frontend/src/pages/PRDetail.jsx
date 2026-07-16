@@ -256,6 +256,9 @@ function PRDetail() {
   const [pr, setPr] = useState(null)
   const [activeTab, setActiveTab] = useState('findings')
   const [runningReview, setRunningReview] = useState(false)
+  const [selectedFindings, setSelectedFindings] = useState(new Set())
+  const [commenting, setCommenting] = useState(false)
+  const [commentResult, setCommentResult] = useState(null)
 
   useEffect(() => {
     fetch(`/api/prs/${id}`).then(r => r.json()).then(setPr)
@@ -268,6 +271,43 @@ function PRDetail() {
   const highFindings = findings.filter(f => f.severity === 'HIGH')
   const mediumFindings = findings.filter(f => f.severity === 'MEDIUM')
   const lowFindings = findings.filter(f => f.severity === 'LOW')
+
+  const toggleFinding = (findingId) => {
+    setSelectedFindings(prev => {
+      const next = new Set(prev)
+      if (next.has(findingId)) next.delete(findingId)
+      else next.add(findingId)
+      return next
+    })
+  }
+
+  const toggleAll = () => {
+    if (selectedFindings.size === findings.length) {
+      setSelectedFindings(new Set())
+    } else {
+      setSelectedFindings(new Set(findings.map(f => f.id)))
+    }
+  }
+
+  const handleCommentSelected = async () => {
+    if (!review || selectedFindings.size === 0) return
+    setCommenting(true)
+    setCommentResult(null)
+    try {
+      const resp = await fetch(`/api/reviews/${review.id}/comment-selected`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ finding_ids: Array.from(selectedFindings) }),
+      })
+      const data = await resp.json()
+      setCommentResult(data)
+      setSelectedFindings(new Set())
+    } catch (e) {
+      setCommentResult({ error: e.message })
+    } finally {
+      setCommenting(false)
+    }
+  }
 
   const handleRunReview = async () => {
     setRunningReview(true)
@@ -549,7 +589,74 @@ function PRDetail() {
               </div>
             </div>
           ) : (
-            findings.map((f, i) => <FindingCard key={f.id} finding={f} index={i} />)
+            <>
+              {/* Select All + Comment Selected bar */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-sm)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2xs)', cursor: 'pointer', fontSize: 'var(--text-sm)', color: 'var(--color-ink-2)' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedFindings.size === findings.length && findings.length > 0}
+                    onChange={toggleAll}
+                    style={{ accentColor: 'var(--color-accent)', width: 16, height: 16 }}
+                  />
+                  Select All ({selectedFindings.size}/{findings.length})
+                </label>
+
+                {selectedFindings.size > 0 && (
+                  <button
+                    onClick={handleCommentSelected}
+                    disabled={commenting}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 'var(--space-2xs)',
+                      padding: 'var(--space-2xs) var(--space-md)',
+                      background: 'var(--color-accent)', color: 'var(--color-accent-ink)',
+                      border: 'none', borderRadius: 'var(--radius-input)',
+                      fontSize: 'var(--text-sm)', fontWeight: 600, cursor: 'pointer',
+                      opacity: commenting ? 0.6 : 1,
+                    }}
+                  >
+                    {commenting ? (
+                      <><Loader2 className="w-4 h-4" style={{ animation: 'spin 1s linear infinite' }} /> Posting...</>
+                    ) : (
+                      <><MessageSquare className="w-4 h-4" /> Comment Selected ({selectedFindings.size})</>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {/* Comment result */}
+              {commentResult && (
+                <div style={{
+                  padding: 'var(--space-sm)', borderRadius: 'var(--radius-card)',
+                  marginBottom: 'var(--space-sm)',
+                  background: commentResult.error ? 'rgba(255,80,80,0.1)' : 'rgba(80,200,120,0.1)',
+                  border: `1px solid ${commentResult.error ? 'rgba(255,80,80,0.2)' : 'rgba(80,200,120,0.2)'}`,
+                  fontSize: 'var(--text-sm)', color: 'var(--color-ink)',
+                }}>
+                  {commentResult.error
+                    ? `❌ Error: ${commentResult.error}`
+                    : `✅ Posted: ${commentResult.posted} | Skipped: ${commentResult.skipped}${commentResult.errors?.length ? ` | Errors: ${commentResult.errors.length}` : ''}`
+                  }
+                </div>
+              )}
+
+              {findings.map((f, i) => (
+                <div key={f.id} style={{ display: 'flex', gap: 'var(--space-sm)', alignItems: 'flex-start' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedFindings.has(f.id)}
+                    onChange={() => toggleFinding(f.id)}
+                    style={{
+                      accentColor: 'var(--color-accent)', width: 16, height: 16,
+                      marginTop: 'var(--space-sm)', flexShrink: 0,
+                    }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <FindingCard finding={f} index={i} />
+                  </div>
+                </div>
+              ))}
+            </>
           )}
         </div>
       )}
