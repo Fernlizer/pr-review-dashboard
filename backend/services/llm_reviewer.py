@@ -1,7 +1,7 @@
-"""LLM Code Reviewer — uses MiMo (Xiaomi AI Studio) for deep code analysis.
+"""LLM Code Reviewer — uses LLM for deep code analysis on DIFF only.
 
-Sends PR diff + source code to LLM and returns structured findings
-with exact file paths, line numbers, and fix suggestions.
+Reviews only the changed code (diff), not the entire file.
+Posts inline comments only on lines that were actually changed.
 """
 
 import json
@@ -9,7 +9,8 @@ import logging
 import os
 import re
 import string
-from typing import List, Dict, Any, Optional
+import difflib
+from typing import List, Dict, Any, Optional, Set
 from dataclasses import dataclass
 
 import httpx
@@ -42,35 +43,35 @@ PROVIDERS = [
 @dataclass
 class LLMFinding:
     severity: str          # HIGH, MEDIUM, LOW
-    category: str          # BUG, Security, Issue, Suggestion
+    category: str          # BUG, Security, Issue, Suggestion, Test, Architecture
     file_path: str         # /src/modules/...
-    line_number: int       # exact line
+    line_number: int       # exact line in the NEW file
     function_name: str     # method/function name
     description: str       # detailed explanation
     code_snippet: str      # the problematic code
     fix_suggestion: str    # how to fix it
-    owasp_tag: Optional[str] = None  # for security findings
+    owasp_tag: Optional[str] = None
 
 
 REVIEW_PROMPT = string.Template("""คุณเป็น senior code reviewer ที่เชี่ยวชาญ NestJS, LoopBack 4, TypeScript, และ security
 
-ตรวจสอบ PR นี้อย่างละเอียด แล้วตอบเป็น JSON array เท่านั้น
+## สิ่งสำคัญ: ตรวจเฉพาะ CODE ที่เปลี่ยน (บรรทัดที่ขึ้นต้นด้วย +) เท่านั้น
+- ห้าม comment บนบรรทัดที่ไม่ได้เปลี่ยน
+- ห้าม comment บน code เดิมที่มีอยู่ก่อนแล้ว
+- line_number ต้องตรงกับบรรทัดในไฟล์ใหม่ (ดูจาก L{line}: ด้านหน้า)
 
-## สิ่งที่ต้องตรวจ:
-1. **Logic correctness** — edge cases, null checks, missing defaults, wrong conditions
-2. **Error handling** — missing try/catch, wrong exception type, swallowed errors
-3. **Type safety** — wrong types, missing null checks, unsafe casts
-4. **Security** — injection, SSRF, IDOR, hardcoded secrets, missing auth checks
-5. **Test coverage** — missing tests, dead code, untested branches
-6. **Architecture** — wrong layer, circular deps, missing validation
-7. **Performance** — N+1 queries, missing pagination, unnecessary loops
+## สิ่งที่ต้องตรวจ (เฉพาะ code ที่เปลี่ยน):
+1. **Logic correctness** — edge cases, null checks, missing defaults
+2. **Error handling** — missing try/catch, swallowed errors
+3. **Type safety** — wrong types, missing null checks
+4. **Security** — injection, SSRF, IDOR, hardcoded secrets
+5. **Missing tests** — ถ้า code เปลี่ยนแต่ไม่มี test ใหม่
 
 ## ข้อจำกัด:
 - ตอบเป็น JSON array เท่านั้น ไม่มีข้อความอื่น
-- ถ้าไม่พบปัญหา ตอบ []
-- ทุก finding ต้องมี file_path ที่ตรงกับไฟล์ที่ให้มา
-- line_number ต้องตรงกับบรรทัดจริงในโค้ด
-- ข้าม finding ที่ไม่สำคัญ (formatting, trivial naming)
+- ถ้าไม่พบปัญหาใน code ที่เปลี่ยน ตอบ []
+- line_number ต้องเป็นบรรทัดที่มี + (บรรทัดที่เพิ่มเข้ามา)
+- ข้าม finding ที่ไม่สำคัญ (formatting, trivial naming, import order)
 
 ## Format:
 ```json
@@ -97,8 +98,8 @@ REVIEW_PROMPT = string.Template("""คุณเป็น senior code reviewer �
 ## Changed Files:
 $files_info
 
-## Source Code:
-$code_content
+## Diff (เฉพาะ code ที่เปลี่ยน):
+$diff_content
 """)
 
 
@@ -108,50 +109,87 @@ async def review_pr_with_llm(
     source_branch: str,
     target_branch: str,
     files: List[Dict[str, Any]],
+    changed_lines: Dict[str, Set[int]],
 ) -> List[LLMFinding]:
     """
-    Send PR code to LLM for deep analysis.
-    Returns structured findings with exact file paths and line numbers.
+    Send PR diff to LLM for deep analysis.
+    Only reviews changed code and returns findings on changed lines only.
+
+    Args:
+        changed_lines: Dict of {file_path: set of line numbers that were changed}
     """
     if not PROVIDERS:
         logger.warning("No LLM providers configured, skipping LLM review")
         return []
 
-    logger.info(f"LLM review: {len(files)} files, total chars: {sum(len(f.get('src_content', '')) for f in files)}")
+    logger.info(f"LLM review: {len(files)} files, {sum(len(v) for v in changed_lines.values())} changed lines")
 
     # Build files info summary
-    files_info = "\n".join(
-        f"- {f['path']} ({f['change_type']}) — {len(f.get('src_content', '').splitlines())} lines"
-        for f in files
-    )
+    files_info_parts = []
+    for f in files:
+        path = f['path']
+        n_changed = len(changed_lines.get(path, set()))
+        files_info_parts.append(f"- {path} ({f['change_type']}) — {n_changed} lines changed")
+    files_info = "\n".join(files_info_parts)
 
-    # Build code content (limit to prevent token overflow)
-    code_parts = []
+    # Build diff content (not full file — just the diff)
+    diff_parts = []
     total_chars = 0
-    max_chars = 30000  # ~10k tokens
+    max_chars = 25000
 
     for f in files:
         src = f.get("src_content", "")
+        tgt = f.get("tgt_content", "")
+        path = f['path']
+
         if not src:
             continue
 
-        header = f"\n{'='*60}\nFILE: {f['path']} ({f['change_type']})\n{'='*60}\n"
+        # Generate diff with line numbers
+        header = f"\n{'='*60}\nFILE: {path} ({f['change_type']})\nChanged lines: {sorted(changed_lines.get(path, set()))[:20]}\n{'='*60}\n"
 
-        # Add line numbers to code
-        lines = src.splitlines()
-        numbered = "\n".join(f"L{i+1}: {line}" for i, line in enumerate(lines))
-        section = header + numbered
+        if tgt:
+            # Generate unified diff
+            diff_lines = list(difflib.unified_diff(
+                tgt.splitlines(keepends=True),
+                src.splitlines(keepends=True),
+                fromfile=f"a{path}",
+                tofile=f"b{path}",
+                lineterm="",
+            ))
+            # Add line numbers to new file lines
+            numbered_diff = []
+            new_line = 0
+            for line in diff_lines:
+                if line.startswith("+") and not line.startswith("+++"):
+                    new_line += 1
+                    numbered_diff.append(f"L{new_line}: {line}")
+                elif line.startswith("-") and not line.startswith("---"):
+                    numbered_diff.append(f"     {line}")
+                elif line.startswith("@@"):
+                    # Parse hunk header to get line numbers
+                    numbered_diff.append(f"     {line}")
+                else:
+                    new_line += 1
+                    numbered_diff.append(f"L{new_line}: {line}")
+            diff_text = "\n".join(numbered_diff)
+        else:
+            # New file — show with line numbers
+            lines = src.splitlines()
+            diff_text = "\n".join(f"L{i+1}: +{line}" for i, line in enumerate(lines))
+
+        section = header + diff_text
 
         if total_chars + len(section) > max_chars:
             remaining = max_chars - total_chars
             if remaining > 500:
-                code_parts.append(section[:remaining] + "\n... (truncated)")
+                diff_parts.append(section[:remaining] + "\n... (truncated)")
             break
 
-        code_parts.append(section)
+        diff_parts.append(section)
         total_chars += len(section)
 
-    code_content = "\n".join(code_parts)
+    diff_content = "\n".join(diff_parts)
 
     prompt = REVIEW_PROMPT.safe_substitute(
         title=title,
@@ -159,18 +197,28 @@ async def review_pr_with_llm(
         source_branch=source_branch,
         target_branch=target_branch,
         files_info=files_info,
-        code_content=code_content,
+        diff_content=diff_content,
     )
 
-    # Call LLM API
-    findings_raw = await _call_llm(prompt)
-    if not findings_raw:
+    # Call LLM
+    raw_response = await _call_llm(prompt)
+    if not raw_response:
         return []
 
     # Parse findings
-    findings = _parse_findings(findings_raw)
-    logger.info(f"LLM review found {len(findings)} findings")
-    return findings
+    findings = _parse_findings(raw_response)
+
+    # FILTER: only keep findings on lines that were actually changed
+    filtered = []
+    for f in findings:
+        file_changed_lines = changed_lines.get(f.file_path, set())
+        if f.line_number in file_changed_lines:
+            filtered.append(f)
+        else:
+            logger.info(f"Filtered out finding on unchanged line {f.file_path}:{f.line_number}")
+
+    logger.info(f"LLM review: {len(findings)} raw → {len(filtered)} after filtering to changed lines")
+    return filtered
 
 
 async def _call_llm(prompt: str) -> Optional[str]:
@@ -196,7 +244,7 @@ async def _try_provider(provider: dict, prompt: str) -> Optional[str]:
         "messages": [
             {
                 "role": "system",
-                "content": "คุณเป็น senior code reviewer ตอบเป็น JSON array เท่านั้น ไม่มีข้อความอื่น"
+                "content": "คุณเป็น senior code reviewer ตอบเป็น JSON array เท่านั้น ไม่มีข้อความอื่น ตรวจเฉพาะ code ที่เปลี่ยน (บรรทัด +) เท่านั้น"
             },
             {
                 "role": "user",
@@ -225,7 +273,6 @@ async def _try_provider(provider: dict, prompt: str) -> Optional[str]:
 
 def _parse_findings(raw: str) -> List[LLMFinding]:
     """Parse LLM response into structured findings."""
-    # Extract JSON from response (might have markdown code blocks)
     json_match = re.search(r'\[.*\]', raw, re.DOTALL)
     if not json_match:
         logger.warning(f"No JSON array found in LLM response: {raw[:200]}")
@@ -251,11 +298,8 @@ def _parse_findings(raw: str) -> List[LLMFinding]:
                 fix_suggestion=item.get("fix_suggestion", ""),
                 owasp_tag=item.get("owasp_tag"),
             )
-            # Validate
             if finding.file_path and finding.line_number > 0:
                 findings.append(finding)
-            else:
-                logger.warning(f"Skipping invalid finding: {item}")
         except Exception as e:
             logger.warning(f"Failed to parse finding: {e}")
 

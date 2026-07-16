@@ -204,13 +204,25 @@ async def _process_new_pr(
     target_branch = pr_data["target_branch"]
     fetched_files = await client.fetch_files_parallel(repo, changes, source_branch, target_branch)
 
-    # Build diff text
+    # Build diff text + track changed lines
     all_diffs = []
     files_content = {}
+    changed_lines = {}  # {file_path: set of changed line numbers in new file}
+
     for ff in fetched_files:
         if ff.src_content:
             all_diffs.append(f"\n{'='*60}\nFILE: {ff.path} ({ff.change_type})\n{'='*60}\n{ff.diff}")
             files_content[ff.path] = ff.src_content
+
+            # Extract changed line numbers from diff
+            if ff.change_type == "add":
+                # New file — all lines are changed
+                changed_lines[ff.path] = set(range(1, len(ff.src_content.splitlines()) + 1))
+            elif ff.tgt_content:
+                # Compute diff and find changed lines
+                changed_lines[ff.path] = _extract_changed_lines(ff.tgt_content, ff.src_content)
+            else:
+                changed_lines[ff.path] = set()
 
     review.raw_diff = "\n".join(all_diffs)
 
@@ -229,7 +241,7 @@ async def _process_new_pr(
         for f in security_findings
     ])
 
-    # LLM review (deep code analysis)
+    # LLM review (deep code analysis — diff only)
     llm_findings = []
     try:
         from services.llm_reviewer import review_pr_with_llm
@@ -244,12 +256,14 @@ async def _process_new_pr(
                     "path": str(ff.path),
                     "change_type": str(ff.change_type),
                     "src_content": str(ff.src_content or ""),
+                    "tgt_content": str(ff.tgt_content or ""),
                 }
                 for ff in fetched_files
                 if ff.src_content
             ],
+            changed_lines=changed_lines,
         )
-        logger.info(f"LLM review found {len(llm_findings)} findings")
+        logger.info(f"LLM review found {len(llm_findings)} findings (changed lines only)")
     except Exception as e:
         logger.error(f"LLM review failed (continuing with security scan only): {type(e).__name__}: {e}")
         llm_findings = []
@@ -416,6 +430,23 @@ async def _maybe_auto_comment(
     if stats["errors"]:
         for err in stats["errors"]:
             logger.error(f"  ❌ {err}")
+
+
+def _extract_changed_lines(old_content: str, new_content: str) -> set:
+    """Extract line numbers that were changed (added/modified) in the new file."""
+    import difflib
+    changed = set()
+    old_lines = old_content.splitlines()
+    new_lines = new_content.splitlines()
+
+    matcher = difflib.SequenceMatcher(None, old_lines, new_lines)
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag in ("insert", "replace"):
+            # Lines j1 to j2 in the new file were changed
+            for line_num in range(j1 + 1, j2 + 1):  # 1-indexed
+                changed.add(line_num)
+
+    return changed
 
 
 def _parse_date(date_str: str) -> Optional[datetime]:
