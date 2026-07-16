@@ -1,43 +1,85 @@
+/* Hallmark · genre: atmospheric · macrostructure: Workbench · design-system: design.md · designed-as-app */
+
 import { useState, useEffect } from 'react'
 import {
-  Settings as SettingsIcon, Play, Pause, Clock, RefreshCw,
+  Play, Pause, Clock, RefreshCw,
   CheckCircle, XCircle, MessageSquare, Loader2, Info, AlertTriangle
 } from 'lucide-react'
 
+/* ── Card base ───────────────────────────────────────────────────── */
+
+const cardStyle = {
+  background: 'var(--color-paper-2)',
+  border: '1px solid var(--color-rule)',
+  borderRadius: 'var(--radius-lg)',
+  overflow: 'hidden',
+}
+
+const sectionLabel = {
+  fontSize: 'var(--text-xs)',
+  fontWeight: 600,
+  color: 'var(--color-ink-3)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.08em',
+  fontFamily: 'var(--font-mono)',
+}
+
+/* ── Loading skeleton ────────────────────────────────────────────── */
+
 function LoadingSkeleton() {
   return (
-    <div className="p-8 space-y-6 animate-fade-in max-w-2xl">
-      <div className="space-y-2">
-        <div className="skeleton h-7 w-48" />
-        <div className="skeleton h-4 w-64" />
+    <div className="p-lg space-y-md animate-fade-in" style={{ maxWidth: 640 }}>
+      <div className="space-y-2xs">
+        <div className="skeleton" style={{ height: 28, width: 180 }} />
+        <div className="skeleton" style={{ height: 16, width: 240 }} />
       </div>
-      <div className="bg-surface border border-surface-border rounded-xl p-6">
-        <div className="skeleton h-48 w-full" />
+      <div style={{ ...cardStyle, padding: 'var(--space-lg)' }}>
+        <div className="skeleton" style={{ height: 200 }} />
       </div>
-      <div className="bg-surface border border-surface-border rounded-xl p-6">
-        <div className="skeleton h-32 w-full" />
+      <div style={{ ...cardStyle, padding: 'var(--space-lg)' }}>
+        <div className="skeleton" style={{ height: 140 }} />
       </div>
     </div>
   )
 }
+
+/* ── Toggle switch (8 states) ────────────────────────────────────── */
 
 function Toggle({ enabled, onChange, loading }) {
   return (
     <button
       onClick={onChange}
       disabled={loading}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-2 focus:ring-offset-dark-900 disabled:opacity-50 ${
-        enabled ? 'bg-emerald-600' : 'bg-dark-600'
-      }`}
+      className="relative inline-flex items-center"
+      style={{
+        height: 24,
+        width: 44,
+        borderRadius: 'var(--radius-full)',
+        background: enabled ? 'var(--color-accent)' : 'var(--color-paper-4)',
+        border: 'none',
+        cursor: loading ? 'not-allowed' : 'pointer',
+        opacity: loading ? 0.5 : 1,
+        transition: `background var(--dur-short) var(--ease-out)`,
+        padding: 0,
+      }}
     >
       <span
-        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform duration-200 ${
-          enabled ? 'translate-x-6' : 'translate-x-1'
-        }`}
+        style={{
+          display: 'inline-block',
+          height: 16,
+          width: 16,
+          borderRadius: 'var(--radius-full)',
+          background: 'var(--color-ink)',
+          boxShadow: '0 1px 3px oklch(10% 0.01 260 / 0.3)',
+          transform: enabled ? 'translateX(24px)' : 'translateX(4px)',
+          transition: `transform var(--dur-short) var(--ease-out)`,
+        }}
       />
     </button>
   )
 }
+
+/* ── Settings page ───────────────────────────────────────────────── */
 
 function SettingsPage() {
   const [status, setStatus] = useState(null)
@@ -153,51 +195,128 @@ function SettingsPage() {
 
   if (loading) return <LoadingSkeleton />
 
+  const btnPrimary = {
+    background: 'var(--color-accent)',
+    color: 'var(--color-accent-ink)',
+    border: 'none',
+    borderRadius: 'var(--radius-md)',
+    padding: '12px 20px',
+    fontSize: 'var(--text-base)',
+    fontWeight: 600,
+    cursor: 'pointer',
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    fontFamily: 'var(--font-body)',
+    transition: `all var(--dur-short) var(--ease-out)`,
+  }
+
+  const btnDanger = {
+    ...btnPrimary,
+    background: 'var(--color-danger)',
+  }
+
+  const btnSecondary = {
+    background: 'var(--color-info)',
+    color: 'oklch(14% 0.04 250)',
+    border: 'none',
+    borderRadius: 'var(--radius-md)',
+    padding: '10px 20px',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 600,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    fontFamily: 'var(--font-body)',
+    transition: `all var(--dur-short) var(--ease-out)`,
+  }
+
+  const presetBase = {
+    padding: '6px 12px',
+    borderRadius: 'var(--radius-md)',
+    fontSize: 'var(--text-xs)',
+    fontWeight: 500,
+    cursor: 'pointer',
+    border: 'none',
+    fontFamily: 'var(--font-mono)',
+    transition: `all var(--dur-micro) var(--ease-out)`,
+  }
+
+  const infoBox = {
+    background: 'var(--color-paper-3)',
+    border: '1px solid var(--color-rule)',
+    borderRadius: 'var(--radius-md)',
+    padding: 'var(--space-sm) var(--space-md)',
+  }
+
   return (
-    <div className="p-8 space-y-6 max-w-2xl animate-fade-in">
+    <div className="p-lg space-y-md animate-fade-in" style={{ maxWidth: 640 }}>
       {/* Header */}
       <div>
-        <h2 className="text-xl font-semibold text-dark-50 tracking-tight">Settings</h2>
-        <p className="text-[13px] text-dark-400 mt-1">Manage the automated review system</p>
+        <h2 className="font-semibold tracking-tight" style={{ fontSize: 'var(--text-xl)', color: 'var(--color-ink)', letterSpacing: '-0.025em' }}>
+          Settings
+        </h2>
+        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-3)', marginTop: 4 }}>
+          Manage the automated review system
+        </p>
       </div>
 
-      {/* Status Card */}
-      <div className="bg-surface border border-surface-border rounded-xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-surface-border">
-          <h3 className="text-[13px] font-semibold text-dark-300 uppercase tracking-wider">System Status</h3>
+      {/* System Status */}
+      <div style={cardStyle}>
+        <div className="px-md py-sm border-b" style={{ borderColor: 'var(--color-rule)' }}>
+          <h3 style={sectionLabel}>System Status</h3>
         </div>
-        <div className="p-5 space-y-5">
+        <div className="p-md space-y-md">
           {/* Status indicator */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className={`relative flex h-2.5 w-2.5`}>
+            <div className="flex items-center gap-sm">
+              <span className="relative flex" style={{ width: 10, height: 10 }}>
                 {status?.enabled && (
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span
+                    className="absolute inline-flex h-full w-full rounded-full"
+                    style={{
+                      background: 'var(--color-accent)',
+                      opacity: 0.5,
+                      animation: 'ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite',
+                    }}
+                  />
                 )}
-                <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
-                  status?.enabled ? 'bg-emerald-500' : 'bg-dark-500'
-                }`} />
+                <span
+                  className="relative inline-flex rounded-full"
+                  style={{
+                    width: 10,
+                    height: 10,
+                    background: status?.enabled ? 'var(--color-accent)' : 'var(--color-ink-4)',
+                  }}
+                />
               </span>
-              <span className="text-[14px] font-medium text-dark-200">
+              <span className="font-medium" style={{ fontSize: 'var(--text-base)', color: 'var(--color-ink-2)' }}>
                 {status?.enabled ? 'Running' : 'Stopped'}
               </span>
             </div>
-            <span className="text-[11px] text-dark-500 font-mono">
+            <span className="font-mono" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-4)' }}>
               Scheduler: {status?.scheduler_running ? 'active' : 'inactive'}
             </span>
           </div>
 
           {/* Info grid */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-dark-800/50 border border-surface-border rounded-lg p-4">
-              <p className="text-[11px] text-dark-500 uppercase tracking-wide mb-1.5">Poll Interval</p>
-              <p className="text-xl font-bold text-dark-100">
-                {status?.interval_minutes} <span className="text-sm font-normal text-dark-400">min</span>
+          <div className="grid grid-cols-2 gap-xs">
+            <div style={infoBox}>
+              <p className="font-mono" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+                Poll Interval
+              </p>
+              <p className="font-bold font-mono" style={{ fontSize: 'var(--text-xl)', color: 'var(--color-ink)' }}>
+                {status?.interval_minutes} <span style={{ fontSize: 'var(--text-sm)', fontWeight: 400, color: 'var(--color-ink-3)' }}>min</span>
               </p>
             </div>
-            <div className="bg-dark-800/50 border border-surface-border rounded-lg p-4">
-              <p className="text-[11px] text-dark-500 uppercase tracking-wide mb-1.5">Next Run</p>
-              <p className="text-sm font-medium text-dark-200">
+            <div style={infoBox}>
+              <p className="font-mono" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+                Next Run
+              </p>
+              <p className="font-medium" style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-2)' }}>
                 {status?.next_run
                   ? new Date(status.next_run).toLocaleString('th-TH')
                   : '— (paused)'}
@@ -209,15 +328,15 @@ function SettingsPage() {
           <button
             onClick={toggleScheduler}
             disabled={!!actionLoading}
-            className={`w-full flex items-center justify-center gap-2.5 px-5 py-3 rounded-xl text-[14px] font-semibold transition-all duration-200 active:scale-[0.99] ${
-              status?.enabled
-                ? 'bg-red-600/90 hover:bg-red-600 text-white'
-                : 'bg-emerald-600 hover:bg-emerald-500 text-white'
-            } disabled:opacity-50 disabled:cursor-not-allowed`}
+            style={{
+              ...(status?.enabled ? btnDanger : btnPrimary),
+              opacity: actionLoading ? 0.6 : 1,
+              cursor: actionLoading ? 'not-allowed' : 'pointer',
+            }}
           >
             {actionLoading === 'enable' || actionLoading === 'disable' ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-4 h-4" style={{ animation: 'spin 1s linear infinite' }} />
                 Processing...
               </>
             ) : status?.enabled ? (
@@ -236,40 +355,57 @@ function SettingsPage() {
       </div>
 
       {/* Interval Settings */}
-      <div className="bg-surface border border-surface-border rounded-xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-surface-border">
-          <h3 className="text-[13px] font-semibold text-dark-300 uppercase tracking-wider">Poll Interval</h3>
+      <div style={cardStyle}>
+        <div className="px-md py-sm border-b" style={{ borderColor: 'var(--color-rule)' }}>
+          <h3 style={sectionLabel}>Poll Interval</h3>
         </div>
-        <div className="p-5 space-y-4">
+        <div className="p-md space-y-md">
           <div>
-            <label className="block text-[13px] text-dark-400 mb-2">
+            <label className="block" style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-3)', marginBottom: 8 }}>
               Frequency (minutes)
             </label>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-sm">
               <input
                 type="number"
                 min={1}
                 max={1440}
                 value={interval}
                 onChange={e => setIntervalState(parseInt(e.target.value) || 1)}
-                className="w-28 bg-dark-800/50 border border-surface-border text-dark-100 text-lg font-mono rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all"
+                className="font-mono"
+                style={{
+                  width: 100,
+                  background: 'var(--color-paper-3)',
+                  border: '1px solid var(--color-rule)',
+                  color: 'var(--color-ink)',
+                  fontSize: 'var(--text-md)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '10px 14px',
+                  outline: 'none',
+                  fontFamily: 'var(--font-mono)',
+                  transition: `border-color var(--dur-micro) var(--ease-out)`,
+                }}
+                onFocus={e => e.currentTarget.style.borderColor = 'var(--color-focus)'}
+                onBlur={e => e.currentTarget.style.borderColor = 'var(--color-rule)'}
               />
-              <span className="text-[13px] text-dark-500">minutes</span>
+              <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-4)' }}>minutes</span>
             </div>
-            <p className="text-[11px] text-dark-600 mt-1.5">1 – 1,440 minutes (max 24 hours)</p>
+            <p className="font-mono" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-4)', marginTop: 6 }}>
+              1 – 1,440 minutes (max 24 hours)
+            </p>
           </div>
 
           {/* Presets */}
-          <div className="flex gap-2">
+          <div className="flex gap-2xs">
             {[5, 10, 15, 30, 60].map(m => (
               <button
                 key={m}
                 onClick={() => setIntervalState(m)}
-                className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all duration-150 ${
-                  interval === m
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-dark-800 text-dark-400 hover:text-dark-200 hover:bg-dark-700 border border-surface-border'
-                }`}
+                style={{
+                  ...presetBase,
+                  background: interval === m ? 'var(--color-accent)' : 'var(--color-paper-3)',
+                  color: interval === m ? 'var(--color-accent-ink)' : 'var(--color-ink-3)',
+                  border: interval === m ? 'none' : '1px solid var(--color-rule)',
+                }}
               >
                 {m}m
               </button>
@@ -279,11 +415,15 @@ function SettingsPage() {
           <button
             onClick={updateInterval}
             disabled={!!actionLoading || interval === status?.interval_minutes}
-            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-[13px] font-medium transition-all duration-150 active:scale-[0.98]"
+            style={{
+              ...btnSecondary,
+              opacity: actionLoading || interval === status?.interval_minutes ? 0.4 : 1,
+              cursor: actionLoading || interval === status?.interval_minutes ? 'not-allowed' : 'pointer',
+            }}
           >
             {actionLoading === 'interval' ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-4 h-4" style={{ animation: 'spin 1s linear infinite' }} />
                 Updating...
               </>
             ) : (
@@ -297,15 +437,17 @@ function SettingsPage() {
       </div>
 
       {/* Auto-Comment */}
-      <div className="bg-surface border border-surface-border rounded-xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-surface-border">
-          <h3 className="text-[13px] font-semibold text-dark-300 uppercase tracking-wider">Auto-Comment</h3>
+      <div style={cardStyle}>
+        <div className="px-md py-sm border-b" style={{ borderColor: 'var(--color-rule)' }}>
+          <h3 style={sectionLabel}>Auto-Comment</h3>
         </div>
-        <div className="p-5 space-y-4">
+        <div className="p-md space-y-md">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[14px] text-dark-200 font-medium">Post comments on Azure DevOps</p>
-              <p className="text-[12px] text-dark-500 mt-0.5">
+              <p className="font-medium" style={{ fontSize: 'var(--text-base)', color: 'var(--color-ink-2)' }}>
+                Post comments on Azure DevOps
+              </p>
+              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-4)', marginTop: 2 }}>
                 Automatically comment review results on PRs after completion
               </p>
             </div>
@@ -313,23 +455,25 @@ function SettingsPage() {
           </div>
 
           {autoComment && (
-            <div className="bg-dark-800/50 border border-surface-border rounded-lg p-4 animate-slide-down">
-              <div className="flex items-center gap-2 mb-3">
-                <Info className="w-4 h-4 text-blue-400" />
-                <p className="text-[13px] font-medium text-dark-200">When a review completes, the system will:</p>
+            <div className="animate-slide-down" style={infoBox}>
+              <div className="flex items-center gap-2xs" style={{ marginBottom: 'var(--space-sm)' }}>
+                <Info className="w-4 h-4" style={{ color: 'var(--color-info)' }} />
+                <p className="font-medium" style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-2)' }}>
+                  When a review completes, the system will:
+                </p>
               </div>
-              <ul className="space-y-2 text-[13px] text-dark-300">
-                <li className="flex items-start gap-2">
-                  <MessageSquare className="w-3.5 h-3.5 text-dark-500 mt-0.5 flex-shrink-0" />
-                  <span>Post a <strong className="text-dark-100">summary comment</strong> on the PR thread (scores + recommendation)</span>
+              <ul style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 'var(--text-sm)', color: 'var(--color-ink-2)' }}>
+                <li className="flex items-start gap-2xs">
+                  <MessageSquare className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--color-ink-4)', marginTop: 2 }} />
+                  <span>Post a <strong style={{ color: 'var(--color-ink)' }}>summary comment</strong> on the PR thread (scores + recommendation)</span>
                 </li>
-                <li className="flex items-start gap-2">
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" />
-                  <span>Post <strong className="text-dark-100">inline comments</strong> on lines with HIGH/MEDIUM findings</span>
+                <li className="flex items-start gap-2xs">
+                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--color-warning)', marginTop: 2 }} />
+                  <span>Post <strong style={{ color: 'var(--color-ink)' }}>inline comments</strong> on lines with HIGH/MEDIUM findings</span>
                 </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle className="w-3.5 h-3.5 text-emerald-400 mt-0.5 flex-shrink-0" />
-                  <span>Include <strong className="text-dark-100">fix suggestions</strong> in every comment</span>
+                <li className="flex items-start gap-2xs">
+                  <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--color-success)', marginTop: 2 }} />
+                  <span>Include <strong style={{ color: 'var(--color-ink)' }}>fix suggestions</strong> in every comment</span>
                 </li>
               </ul>
             </div>
@@ -340,11 +484,20 @@ function SettingsPage() {
       {/* Toast message */}
       {message && (
         <div
-          className={`fixed bottom-6 right-6 flex items-center gap-3 px-4 py-3 rounded-xl text-[13px] shadow-lg border animate-slide-up ${
-            message.type === 'success'
-              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-              : 'bg-red-500/10 border-red-500/20 text-red-400'
-          }`}
+          className="fixed flex items-center gap-sm"
+          style={{
+            bottom: 24,
+            right: 24,
+            padding: '12px 16px',
+            borderRadius: 'var(--radius-lg)',
+            boxShadow: '0 4px 12px oklch(10% 0.01 260 / 0.4)',
+            border: `1px solid ${message.type === 'success' ? 'var(--color-success)' : 'var(--color-danger)'}`,
+            background: message.type === 'success' ? 'var(--color-success-bg)' : 'var(--color-danger-bg)',
+            color: message.type === 'success' ? 'var(--color-success)' : 'var(--color-danger)',
+            fontSize: 'var(--text-sm)',
+            animation: 'slideUp var(--dur-long) var(--ease-out)',
+            zIndex: 'var(--z-toast)',
+          }}
         >
           {message.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
           {message.text}

@@ -30,41 +30,76 @@ function App() {
   return (
     <div className="flex min-h-screen">
       {/* Sidebar */}
-      <aside className="w-[260px] bg-surface border-r border-surface-border flex flex-col flex-shrink-0">
-        {/* Logo */}
-        <div className="px-5 py-5 border-b border-surface-border">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center">
-              <Shield className="w-4.5 h-4.5 text-emerald-400" />
+      <aside
+        className="w-[240px] flex-shrink-0 flex flex-col border-r"
+        style={{
+          background: 'var(--color-paper-2)',
+          borderColor: 'var(--color-rule)',
+        }}
+      >
+        {/* Wordmark */}
+        <div
+          className="px-md py-lg border-b"
+          style={{ borderColor: 'var(--color-rule)' }}
+        >
+          <div className="flex items-center gap-sm">
+            <div
+              className="w-8 h-8 rounded-md flex items-center justify-center"
+              style={{ background: 'var(--color-accent-bg)' }}
+            >
+              <Shield
+                className="w-4 h-4"
+                style={{ color: 'var(--color-accent)' }}
+              />
             </div>
             <div>
-              <h1 className="text-[15px] font-semibold text-dark-100 tracking-tight">PR Review</h1>
-              <p className="text-[11px] text-dark-500 leading-tight">Security Scanner</p>
+              <h1
+                className="text-sm font-semibold tracking-tight"
+                style={{ color: 'var(--color-ink)', letterSpacing: '-0.02em' }}
+              >
+                PR Review
+              </h1>
+              <p
+                className="text-xs font-mono"
+                style={{ color: 'var(--color-ink-3)' }}
+              >
+                security scanner
+              </p>
             </div>
           </div>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-3 space-y-0.5">
+        <nav className="flex-1 px-sm py-sm" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
           {navItems.map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
               to={to}
               end={to === '/'}
               className={({ isActive }) =>
-                `group flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150 ${
-                  isActive
-                    ? 'bg-dark-800 text-dark-50'
-                    : 'text-dark-400 hover:text-dark-200 hover:bg-dark-800/50'
-                }`
+                `group flex items-center gap-sm px-sm py-[7px] rounded-md text-sm font-medium transition-colors`
               }
+              style={({ isActive }) => ({
+                background: isActive ? 'var(--color-paper-3)' : 'transparent',
+                color: isActive ? 'var(--color-ink)' : 'var(--color-ink-3)',
+                transitionDuration: 'var(--dur-micro)',
+              })}
             >
               {({ isActive }) => (
                 <>
-                  <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-emerald-400' : 'text-dark-500 group-hover:text-dark-400'}`} />
+                  <Icon
+                    className="w-4 h-4 flex-shrink-0"
+                    style={{
+                      color: isActive ? 'var(--color-accent)' : 'var(--color-ink-4)',
+                      transition: `color var(--dur-micro) var(--ease-out)`,
+                    }}
+                  />
                   {label}
                   {isActive && (
-                    <div className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    <div
+                      className="ml-auto w-1.5 h-1.5 rounded-full"
+                      style={{ background: 'var(--color-accent)' }}
+                    />
                   )}
                 </>
               )}
@@ -73,13 +108,24 @@ function App() {
         </nav>
 
         {/* Poll button */}
-        <div className="p-3 border-t border-surface-border">
+        <div className="p-sm border-t" style={{ borderColor: 'var(--color-rule)' }}>
           <button
             onClick={triggerPoll}
             disabled={polling}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-[13px] font-medium transition-all duration-150 active:scale-[0.98]"
+            className="w-full flex items-center justify-center gap-2xs rounded-md text-sm font-semibold transition-all"
+            style={{
+              background: polling ? 'var(--color-accent-2)' : 'var(--color-accent)',
+              color: 'var(--color-accent-ink)',
+              padding: '10px 16px',
+              opacity: polling ? 0.7 : 1,
+              cursor: polling ? 'not-allowed' : 'pointer',
+              transitionDuration: 'var(--dur-short)',
+            }}
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${polling ? 'animate-spin' : ''}`} />
+            <RefreshCw
+              className="w-3.5 h-3.5"
+              style={polling ? { animation: 'spin 1s linear infinite' } : {}}
+            />
             {polling ? 'Polling...' : 'Poll Now'}
           </button>
         </div>

@@ -1,117 +1,183 @@
+/* Hallmark · genre: atmospheric · macrostructure: Workbench · design-system: design.md · designed-as-app */
+
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
   GitPullRequest, FileSearch, AlertTriangle, Flame,
-  CheckCircle, XCircle, MessageSquare, ArrowUpRight, Loader2
+  CheckCircle, XCircle, MessageSquare, ArrowUpRight
 } from 'lucide-react'
+
+/* ── Card base ───────────────────────────────────────────────────── */
+
+const cardStyle = {
+  background: 'var(--color-paper-2)',
+  border: '1px solid var(--color-rule)',
+  borderRadius: 'var(--radius-lg)',
+}
+
+const sectionLabel = {
+  fontSize: 'var(--text-xs)',
+  fontWeight: 600,
+  color: 'var(--color-ink-3)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.08em',
+  fontFamily: 'var(--font-mono)',
+}
+
+/* ── Loading skeleton ────────────────────────────────────────────── */
 
 function LoadingSkeleton() {
   return (
-    <div className="p-8 space-y-6 animate-fade-in">
-      <div className="space-y-2">
-        <div className="skeleton h-7 w-48" />
-        <div className="skeleton h-4 w-72" />
+    <div className="p-lg space-y-lg animate-fade-in">
+      <div className="space-y-2xs">
+        <div className="skeleton" style={{ height: 28, width: 180 }} />
+        <div className="skeleton" style={{ height: 16, width: 260 }} />
       </div>
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-sm">
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="bg-surface border border-surface-border rounded-xl p-5">
-            <div className="skeleton h-4 w-20 mb-3" />
-            <div className="skeleton h-8 w-16" />
+          <div key={i} style={{ ...cardStyle, padding: 'var(--space-md)' }}>
+            <div className="skeleton" style={{ height: 14, width: 72, marginBottom: 12 }} />
+            <div className="skeleton" style={{ height: 32, width: 56 }} />
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-3 gap-4">
-        {[...Array(3)].map((_, i) => (
-          <div key={i} className="bg-surface border border-surface-border rounded-xl p-5">
-            <div className="skeleton h-4 w-24 mb-3" />
-            <div className="skeleton h-8 w-12" />
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function StatCard({ label, value, icon: Icon, color, subtext }) {
-  const colorMap = {
-    emerald: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', ring: 'ring-emerald-500/20' },
-    blue: { bg: 'bg-blue-500/10', text: 'text-blue-400', ring: 'ring-blue-500/20' },
-    violet: { bg: 'bg-violet-500/10', text: 'text-violet-400', ring: 'ring-violet-500/20' },
-    amber: { bg: 'bg-amber-500/10', text: 'text-amber-400', ring: 'ring-amber-500/20' },
-    red: { bg: 'bg-red-500/10', text: 'text-red-400', ring: 'ring-red-500/20' },
-  }
-  const c = colorMap[color] || colorMap.emerald
-
-  return (
-    <div className="bg-surface border border-surface-border rounded-xl p-5 hover:border-dark-600 transition-colors duration-200 group">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-[13px] text-dark-400 font-medium">{label}</span>
-        <div className={`w-8 h-8 rounded-lg ${c.bg} flex items-center justify-center`}>
-          <Icon className={`w-4 h-4 ${c.text}`} />
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-sm">
+        <div className="md:col-span-3" style={{ ...cardStyle, padding: 'var(--space-md)' }}>
+          <div className="skeleton" style={{ height: 120 }} />
+        </div>
+        <div className="md:col-span-2" style={{ ...cardStyle, padding: 'var(--space-md)' }}>
+          <div className="skeleton" style={{ height: 120 }} />
         </div>
       </div>
-      <p className="text-[28px] font-bold text-dark-50 tracking-tight leading-none">
+    </div>
+  )
+}
+
+/* ── Stat Card ───────────────────────────────────────────────────── */
+
+function StatCard({ label, value, icon: Icon, accentVar }) {
+  return (
+    <div
+      className="group"
+      style={{ ...cardStyle, padding: 'var(--space-md)', transition: `border-color var(--dur-micro) var(--ease-out)` }}
+      onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--color-paper-4)'}
+      onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--color-rule)'}
+    >
+      <div className="flex items-center justify-between" style={{ marginBottom: 'var(--space-sm)' }}>
+        <span className="font-medium" style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-3)' }}>
+          {label}
+        </span>
+        <div
+          className="rounded-md flex items-center justify-center"
+          style={{ width: 28, height: 28, background: 'var(--color-accent-bg)' }}
+        >
+          <Icon className="w-3.5 h-3.5" style={{ color: `var(${accentVar})` }} />
+        </div>
+      </div>
+      <p
+        className="font-bold tracking-tight font-mono"
+        style={{
+          fontSize: 'var(--text-2xl)',
+          color: 'var(--color-ink)',
+          lineHeight: 1,
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
         {value}
       </p>
-      {subtext && <p className="text-[12px] text-dark-500 mt-1">{subtext}</p>}
     </div>
   )
 }
 
-function RecommendationCard({ label, value, icon: Icon, color }) {
-  const colorMap = {
-    emerald: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20' },
-    red: { bg: 'bg-red-500/10', text: 'text-red-400', border: 'border-red-500/20' },
-    amber: { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20' },
-  }
-  const c = colorMap[color] || colorMap.emerald
+/* ── Recommendation card ─────────────────────────────────────────── */
 
+function RecommendationCard({ label, value, icon: Icon, accentVar }) {
   return (
-    <div className="bg-surface border border-surface-border rounded-xl p-4 flex items-center gap-4 hover:border-dark-600 transition-colors duration-200">
-      <div className={`w-10 h-10 rounded-xl ${c.bg} flex items-center justify-center flex-shrink-0`}>
-        <Icon className={`w-5 h-5 ${c.text}`} />
+    <div style={{ ...cardStyle, padding: '10px var(--space-md)', display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+      <div
+        className="rounded-md flex items-center justify-center flex-shrink-0"
+        style={{ width: 32, height: 32, background: 'var(--color-accent-bg)' }}
+      >
+        <Icon className="w-4 h-4" style={{ color: `var(${accentVar})` }} />
       </div>
       <div>
-        <p className="text-xl font-bold text-dark-50 leading-none">{value}</p>
-        <p className="text-[12px] text-dark-500 mt-1">{label}</p>
+        <p
+          className="font-bold leading-none font-mono"
+          style={{ fontSize: 'var(--text-lg)', color: 'var(--color-ink)', fontVariantNumeric: 'tabular-nums' }}
+        >
+          {value}
+        </p>
+        <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-3)', marginTop: 2 }}>{label}</p>
       </div>
     </div>
   )
 }
 
-function SeverityBar({ label, count, total, color }) {
-  const pct = total > 0 ? (count / total) * 100 : 0
-  const colorMap = {
-    red: 'bg-red-500',
-    amber: 'bg-amber-500',
-    blue: 'bg-blue-500',
-  }
+/* ── Severity bar ────────────────────────────────────────────────── */
 
+function SeverityBar({ label, count, total, accentVar }) {
+  const pct = total > 0 ? (count / total) * 100 : 0
   return (
-    <div className="flex items-center gap-3">
-      <span className="text-[12px] text-dark-400 w-16 flex-shrink-0">{label}</span>
-      <div className="flex-1 bg-dark-800 rounded-full h-2 overflow-hidden">
+    <div className="flex items-center gap-sm">
+      <span className="flex-shrink-0 font-mono" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-3)', width: 56 }}>
+        {label}
+      </span>
+      <div className="flex-1 overflow-hidden" style={{ height: 6, background: 'var(--color-paper-3)', borderRadius: 'var(--radius-full)' }}>
         <div
-          className={`h-full rounded-full ${colorMap[color]} transition-all duration-700 ease-out`}
-          style={{ width: `${Math.max(pct, count > 0 ? 8 : 0)}%` }}
+          style={{
+            height: '100%',
+            width: `${Math.max(pct, count > 0 ? 8 : 0)}%`,
+            background: `var(${accentVar})`,
+            borderRadius: 'var(--radius-full)',
+            transition: 'width 0.7s var(--ease-out)',
+          }}
         />
       </div>
-      <span className="text-[13px] text-dark-300 font-medium w-8 text-right">{count}</span>
+      <span className="font-medium text-right font-mono" style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-2)', width: 32 }}>
+        {count}
+      </span>
     </div>
   )
 }
+
+/* ── Empty state ─────────────────────────────────────────────────── */
 
 function EmptyState({ icon: Icon, title, description }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-8">
-      <div className="w-14 h-14 rounded-2xl bg-dark-800 flex items-center justify-center mb-4">
-        <Icon className="w-6 h-6 text-dark-500" />
+    <div className="flex flex-col items-center justify-center" style={{ padding: 'var(--space-3xl) var(--space-lg)' }}>
+      <div
+        className="rounded-lg flex items-center justify-center"
+        style={{ width: 48, height: 48, background: 'var(--color-paper-3)', marginBottom: 'var(--space-md)' }}
+      >
+        <Icon className="w-5 h-5" style={{ color: 'var(--color-ink-4)' }} />
       </div>
-      <p className="text-dark-300 font-medium text-sm">{title}</p>
-      <p className="text-dark-500 text-[13px] mt-1 text-center max-w-xs">{description}</p>
+      <p className="font-medium" style={{ fontSize: 'var(--text-base)', color: 'var(--color-ink-2)' }}>{title}</p>
+      <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-3)', marginTop: 4, textAlign: 'center', maxWidth: 320 }}>{description}</p>
     </div>
   )
 }
+
+/* ── Recommendation badge ────────────────────────────────────────── */
+
+function RecommendationBadge({ rec }) {
+  const config = {
+    approve: { bg: 'var(--color-success-bg)', text: 'var(--color-success)', label: 'Approve' },
+    request_changes: { bg: 'var(--color-danger-bg)', text: 'var(--color-danger)', label: 'Changes' },
+    comment: { bg: 'var(--color-warning-bg)', text: 'var(--color-warning)', label: 'Comment' },
+  }
+  const c = config[rec] || { bg: 'var(--color-paper-3)', text: 'var(--color-ink-2)', label: rec }
+
+  return (
+    <span
+      className="inline-flex items-center font-medium flex-shrink-0 font-mono"
+      style={{ background: c.bg, color: c.text, padding: '3px 8px', borderRadius: 'var(--radius-sm)', fontSize: 'var(--text-xs)' }}
+    >
+      {c.label}
+    </span>
+  )
+}
+
+/* ── Dashboard ───────────────────────────────────────────────────── */
 
 function Dashboard() {
   const [stats, setStats] = useState(null)
@@ -130,69 +196,62 @@ function Dashboard() {
   const lowCount = stats.findings_by_severity?.LOW || 0
 
   return (
-    <div className="p-8 space-y-8 animate-fade-in">
+    <div className="p-lg space-y-lg animate-fade-in" style={{ maxWidth: 1200 }}>
       {/* Header */}
-      <div>
-        <h2 className="text-xl font-semibold text-dark-50 tracking-tight">Dashboard</h2>
-        <p className="text-[13px] text-dark-400 mt-1">Automated PR security review overview</p>
+      <div style={{ '--i': 0 }} className="reveal">
+        <h2 className="font-semibold tracking-tight" style={{ fontSize: 'var(--text-xl)', color: 'var(--color-ink)', letterSpacing: '-0.025em' }}>
+          Dashboard
+        </h2>
+        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-3)', marginTop: 4 }}>
+          Automated PR security review overview
+        </p>
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-4 gap-4">
-        <StatCard label="Total PRs" value={stats.total_prs} icon={GitPullRequest} color="blue" />
-        <StatCard label="Reviews" value={stats.total_reviews} icon={FileSearch} color="violet" />
-        <StatCard label="Findings" value={totalFindings} icon={AlertTriangle} color="amber" />
-        <StatCard label="Critical" value={highCount} icon={Flame} color="red" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-sm reveal" style={{ '--i': 1 }}>
+        <StatCard label="Total PRs" value={stats.total_prs} icon={GitPullRequest} accentVar="--color-info" />
+        <StatCard label="Reviews" value={stats.total_reviews} icon={FileSearch} accentVar="--color-accent" />
+        <StatCard label="Findings" value={totalFindings} icon={AlertTriangle} accentVar="--color-warning" />
+        <StatCard label="Critical" value={highCount} icon={Flame} accentVar="--color-danger" />
       </div>
 
       {/* Recommendation + Severity row */}
-      <div className="grid grid-cols-5 gap-4">
-        <div className="col-span-3 bg-surface border border-surface-border rounded-xl p-5">
-          <h3 className="text-[13px] font-semibold text-dark-300 mb-4 uppercase tracking-wider">Recommendations</h3>
-          <div className="grid grid-cols-3 gap-3">
-            <RecommendationCard
-              label="Approved"
-              value={stats.recommendations?.approve || 0}
-              icon={CheckCircle}
-              color="emerald"
-            />
-            <RecommendationCard
-              label="Changes Requested"
-              value={stats.recommendations?.request_changes || 0}
-              icon={XCircle}
-              color="red"
-            />
-            <RecommendationCard
-              label="Comments"
-              value={stats.recommendations?.comment || 0}
-              icon={MessageSquare}
-              color="amber"
-            />
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-sm reveal" style={{ '--i': 2 }}>
+        <div className="md:col-span-3" style={{ ...cardStyle, padding: 'var(--space-md)' }}>
+          <h3 style={sectionLabel}>Recommendations</h3>
+          <div className="grid grid-cols-3 gap-xs" style={{ marginTop: 'var(--space-sm)' }}>
+            <RecommendationCard label="Approved" value={stats.recommendations?.approve || 0} icon={CheckCircle} accentVar="--color-success" />
+            <RecommendationCard label="Changes" value={stats.recommendations?.request_changes || 0} icon={XCircle} accentVar="--color-danger" />
+            <RecommendationCard label="Comments" value={stats.recommendations?.comment || 0} icon={MessageSquare} accentVar="--color-warning" />
           </div>
         </div>
 
-        <div className="col-span-2 bg-surface border border-surface-border rounded-xl p-5">
-          <h3 className="text-[13px] font-semibold text-dark-300 mb-4 uppercase tracking-wider">Findings by Severity</h3>
-          <div className="space-y-3">
-            <SeverityBar label="HIGH" count={highCount} total={totalFindings} color="red" />
-            <SeverityBar label="MEDIUM" count={medCount} total={totalFindings} color="amber" />
-            <SeverityBar label="LOW" count={lowCount} total={totalFindings} color="blue" />
+        <div className="md:col-span-2" style={{ ...cardStyle, padding: 'var(--space-md)' }}>
+          <h3 style={sectionLabel}>Findings by Severity</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)', marginTop: 'var(--space-md)' }}>
+            <SeverityBar label="HIGH" count={highCount} total={totalFindings} accentVar="--color-danger" />
+            <SeverityBar label="MEDIUM" count={medCount} total={totalFindings} accentVar="--color-warning" />
+            <SeverityBar label="LOW" count={lowCount} total={totalFindings} accentVar="--color-info" />
           </div>
         </div>
       </div>
 
       {/* Poll Status */}
       {stats.poll_states?.length > 0 && (
-        <div className="bg-surface border border-surface-border rounded-xl p-5">
-          <h3 className="text-[13px] font-semibold text-dark-300 mb-4 uppercase tracking-wider">Poll Status</h3>
-          <div className="space-y-2">
+        <div className="reveal" style={{ ...cardStyle, padding: 'var(--space-md)', '--i': 3 }}>
+          <h3 style={sectionLabel}>Poll Status</h3>
+          <div style={{ marginTop: 'var(--space-sm)' }}>
             {stats.poll_states.map(ps => (
-              <div key={ps.repo} className="flex items-center justify-between py-2 border-b border-surface-border last:border-0">
-                <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  <span className="text-[13px] text-dark-200 font-mono">{ps.repo}</span>
+              <div
+                key={ps.repo}
+                className="flex items-center justify-between"
+                style={{ padding: 'var(--space-xs) 0', borderBottom: '1px solid var(--color-rule)' }}
+              >
+                <div className="flex items-center gap-2xs">
+                  <div className="rounded-full" style={{ width: 6, height: 6, background: 'var(--color-accent)' }} />
+                  <span className="font-mono" style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-2)' }}>{ps.repo}</span>
                 </div>
-                <span className="text-[12px] text-dark-500">
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-4)' }}>
                   {ps.last_poll_at ? new Date(ps.last_poll_at).toLocaleString('th-TH') : 'Never'}
                 </span>
               </div>
@@ -202,56 +261,59 @@ function Dashboard() {
       )}
 
       {/* Recent Reviews */}
-      <div className="bg-surface border border-surface-border rounded-xl">
-        <div className="px-5 py-4 border-b border-surface-border">
-          <h3 className="text-[13px] font-semibold text-dark-300 uppercase tracking-wider">Recent Reviews</h3>
+      <div className="reveal" style={{ ...cardStyle, overflow: 'hidden', '--i': 4 }}>
+        <div className="px-md py-sm border-b" style={{ borderColor: 'var(--color-rule)' }}>
+          <h3 style={sectionLabel}>Recent Reviews</h3>
         </div>
         {recentReviews.length === 0 ? (
-          <EmptyState
-            icon={FileSearch}
-            title="No reviews yet"
-            description="Reviews will appear here once PRs are scanned by the security scanner."
-          />
+          <EmptyState icon={FileSearch} title="No reviews yet" description="Reviews will appear here once PRs are scanned by the security scanner." />
         ) : (
-          <div className="divide-y divide-surface-border">
-            {recentReviews.map((rv, i) => (
+          <div>
+            {recentReviews.map((rv) => (
               <Link
                 key={rv.id}
                 to={`/prs/${rv.pr_id}`}
-                className="flex items-center justify-between px-5 py-3.5 hover:bg-dark-800/40 transition-colors duration-150 group"
-                style={{ animationDelay: `${i * 30}ms` }}
+                className="flex items-center justify-between group"
+                style={{
+                  padding: 'var(--space-xs) var(--space-md)',
+                  borderBottom: '1px solid var(--color-rule)',
+                  textDecoration: 'none',
+                  transition: `background var(--dur-micro) var(--ease-out)`,
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--color-paper-3)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
               >
-                <div className="flex items-center gap-3 min-w-0">
+                <div className="flex items-center gap-sm min-w-0">
                   <RecommendationBadge rec={rv.recommendation} />
                   <div className="min-w-0">
-                    <p className="text-[13px] font-medium text-dark-100 truncate max-w-md">
+                    <p className="font-medium truncate" style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink)', maxWidth: 400 }}>
                       {rv.pr_title || `PR #${rv.pr_id}`}
                     </p>
-                    <p className="text-[11px] text-dark-500 mt-0.5">
+                    <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-4)', marginTop: 2 }}>
                       {rv.pr_repo} · {rv.author}
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-4 flex-shrink-0 ml-4">
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center gap-sm flex-shrink-0" style={{ marginLeft: 'var(--space-md)' }}>
+                  <div className="flex items-center gap-2xs">
                     {rv.high_count > 0 && (
-                      <span className="text-[11px] font-medium text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">
+                      <span className="font-mono font-medium" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-danger)', background: 'var(--color-danger-bg)', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
                         {rv.high_count}H
                       </span>
                     )}
                     {rv.medium_count > 0 && (
-                      <span className="text-[11px] font-medium text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                      <span className="font-mono font-medium" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-warning)', background: 'var(--color-warning-bg)', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
                         {rv.medium_count}M
                       </span>
                     )}
                     {rv.low_count > 0 && (
-                      <span className="text-[11px] font-medium text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">
+                      <span className="font-mono font-medium" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-info)', background: 'var(--color-info-bg)', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
                         {rv.low_count}L
                       </span>
                     )}
                   </div>
-                  <span className="text-[11px] text-dark-500">{rv.duration_seconds}s</span>
-                  <ArrowUpRight className="w-3.5 h-3.5 text-dark-600 group-hover:text-dark-400 transition-colors" />
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-4)' }}>{rv.duration_seconds}s</span>
+                  <ArrowUpRight className="w-3.5 h-3.5" style={{ color: 'var(--color-ink-4)', transition: `color var(--dur-micro) var(--ease-out)` }} />
                 </div>
               </Link>
             ))}
@@ -259,21 +321,6 @@ function Dashboard() {
         )}
       </div>
     </div>
-  )
-}
-
-function RecommendationBadge({ rec }) {
-  const config = {
-    approve: { bg: 'bg-emerald-500/15', text: 'text-emerald-400', label: 'Approve' },
-    request_changes: { bg: 'bg-red-500/15', text: 'text-red-400', label: 'Changes' },
-    comment: { bg: 'bg-amber-500/15', text: 'text-amber-400', label: 'Comment' },
-  }
-  const c = config[rec] || { bg: 'bg-dark-700', text: 'text-dark-300', label: rec }
-
-  return (
-    <span className={`inline-flex items-center px-2 py-1 rounded-md text-[11px] font-medium ${c.bg} ${c.text} flex-shrink-0`}>
-      {c.label}
-    </span>
   )
 }
 

@@ -1,3 +1,5 @@
+/* Hallmark · genre: atmospheric · macrostructure: Workbench · design-system: design.md · designed-as-app */
+
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
@@ -6,23 +8,248 @@ import {
   Loader2, Play
 } from 'lucide-react'
 
+/* ── Card base ───────────────────────────────────────────────────── */
+
+const cardStyle = {
+  background: 'var(--color-paper-2)',
+  border: '1px solid var(--color-rule)',
+  borderRadius: 'var(--radius-lg)',
+}
+
+const sectionLabel = {
+  fontSize: 'var(--text-xs)',
+  fontWeight: 600,
+  color: 'var(--color-ink-3)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.08em',
+  fontFamily: 'var(--font-mono)',
+}
+
+/* ── Loading skeleton ────────────────────────────────────────────── */
+
 function LoadingSkeleton() {
   return (
-    <div className="p-8 space-y-6 animate-fade-in">
-      <div className="flex items-center gap-4">
-        <div className="skeleton h-9 w-9 rounded-lg" />
-        <div className="space-y-2 flex-1">
-          <div className="skeleton h-5 w-32" />
-          <div className="skeleton h-7 w-96" />
-          <div className="skeleton h-4 w-64" />
+    <div className="p-lg space-y-md animate-fade-in">
+      <div className="flex items-center gap-md">
+        <div className="skeleton" style={{ width: 36, height: 36, borderRadius: 'var(--radius-md)' }} />
+        <div className="space-y-2xs flex-1">
+          <div className="skeleton" style={{ height: 18, width: 120 }} />
+          <div className="skeleton" style={{ height: 24, width: 380 }} />
+          <div className="skeleton" style={{ height: 14, width: 240 }} />
         </div>
       </div>
-      <div className="bg-surface border border-surface-border rounded-xl p-6">
-        <div className="skeleton h-64 w-full" />
+      <div style={{ ...cardStyle, padding: 'var(--space-lg)' }}>
+        <div className="skeleton" style={{ height: 240 }} />
       </div>
     </div>
   )
 }
+
+/* ── Score ring ──────────────────────────────────────────────────── */
+
+function ScoreCard({ label, score }) {
+  const pct = score != null ? (score / 10) * 100 : 0
+  const circumference = 2 * Math.PI * 20
+  const offset = circumference - (pct / 100) * circumference
+
+  let color = 'var(--color-danger)'
+  if (score >= 8) color = 'var(--color-success)'
+  else if (score >= 5) color = 'var(--color-warning)'
+
+  return (
+    <div className="flex flex-col items-center" style={{ gap: 8, padding: 'var(--space-xs) 0' }}>
+      <div className="relative" style={{ width: 52, height: 52 }}>
+        <svg style={{ width: 52, height: 52, transform: 'rotate(-90deg)' }} viewBox="0 0 48 48">
+          <circle cx="24" cy="24" r="20" fill="none" stroke="var(--color-paper-3)" strokeWidth="3" />
+          <circle
+            cx="24" cy="24" r="20" fill="none"
+            stroke={color}
+            strokeWidth="3"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            strokeLinecap="round"
+            className="score-ring"
+          />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span
+            className="font-bold font-mono"
+            style={{ fontSize: 'var(--text-md)', color: 'var(--color-ink)' }}
+          >
+            {score ?? '–'}
+          </span>
+        </div>
+      </div>
+      <span className="font-mono" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-3)' }}>
+        {label}
+      </span>
+    </div>
+  )
+}
+
+/* ── Finding card ────────────────────────────────────────────────── */
+
+function FindingCard({ finding, index }) {
+  const severityConfig = {
+    HIGH: {
+      border: 'var(--color-danger)',
+      bg: 'var(--color-danger-bg)',
+      badge: { bg: 'var(--color-danger-bg)', text: 'var(--color-danger)' },
+    },
+    MEDIUM: {
+      border: 'var(--color-warning)',
+      bg: 'var(--color-warning-bg)',
+      badge: { bg: 'var(--color-warning-bg)', text: 'var(--color-warning)' },
+    },
+    LOW: {
+      border: 'var(--color-info)',
+      bg: 'var(--color-info-bg)',
+      badge: { bg: 'var(--color-info-bg)', text: 'var(--color-info)' },
+    },
+  }
+  const sev = severityConfig[finding.severity] || severityConfig.LOW
+
+  return (
+    <div
+      className="reveal"
+      style={{
+        border: `1px solid ${sev.border}`,
+        background: sev.bg,
+        borderRadius: 'var(--radius-lg)',
+        padding: 'var(--space-md)',
+        '--i': index,
+      }}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-2xs flex-wrap" style={{ marginBottom: 'var(--space-sm)' }}>
+        <span
+          className="font-bold uppercase font-mono"
+          style={{
+            fontSize: 'var(--text-xs)',
+            padding: '2px 8px',
+            borderRadius: 'var(--radius-sm)',
+            background: sev.badge.bg,
+            color: sev.badge.text,
+            letterSpacing: '0.05em',
+          }}
+        >
+          {finding.severity}
+        </span>
+        <span
+          className="font-mono"
+          style={{
+            fontSize: 'var(--text-xs)',
+            padding: '2px 8px',
+            borderRadius: 'var(--radius-sm)',
+            background: 'var(--color-paper-3)',
+            color: 'var(--color-ink-3)',
+            border: '1px solid var(--color-rule)',
+          }}
+        >
+          {finding.category}
+        </span>
+        {finding.owasp_tag && (
+          <span className="font-mono" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-4)' }}>
+            {finding.owasp_tag}
+          </span>
+        )}
+        {finding.is_automated && (
+          <span
+            className="font-medium"
+            style={{ fontSize: 'var(--text-xs)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--color-accent-bg)', color: 'var(--color-accent)' }}
+          >
+            Auto
+          </span>
+        )}
+      </div>
+
+      {/* File path */}
+      <div className="flex items-center gap-2xs" style={{ marginBottom: 8 }}>
+        <FileCode className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--color-ink-4)' }} />
+        <span className="font-mono truncate" style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-2)' }}>
+          {finding.file_path}:{finding.line_number}
+        </span>
+      </div>
+
+      {/* Description */}
+      {finding.description && (
+        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-2)', lineHeight: 1.6, marginBottom: 'var(--space-sm)' }}>
+          {finding.description}
+        </p>
+      )}
+
+      {/* Code snippet */}
+      {finding.code_snippet && (
+        <div
+          className="overflow-x-auto"
+          style={{
+            background: 'var(--color-paper)',
+            border: '1px solid var(--color-rule)',
+            borderRadius: 'var(--radius-md)',
+            padding: 'var(--space-xs) var(--space-sm)',
+            marginBottom: 'var(--space-sm)',
+          }}
+        >
+          <code className="font-mono" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-2)', lineHeight: 1.7 }}>
+            {finding.code_snippet}
+          </code>
+        </div>
+      )}
+
+      {/* Fix suggestion */}
+      {finding.fix_suggestion && (
+        <div
+          style={{
+            background: 'var(--color-success-bg)',
+            border: '1px solid var(--color-success)',
+            borderRadius: 'var(--radius-md)',
+            padding: 'var(--space-xs) var(--space-sm)',
+          }}
+        >
+          <div className="flex items-center gap-2xs" style={{ marginBottom: 6 }}>
+            <Wrench className="w-3.5 h-3.5" style={{ color: 'var(--color-success)' }} />
+            <span className="font-semibold uppercase font-mono" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-success)', letterSpacing: '0.06em' }}>
+              Fix Suggestion
+            </span>
+          </div>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink)', lineHeight: 1.6 }}>
+            {finding.fix_suggestion}
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── Recommendation badge ────────────────────────────────────────── */
+
+function RecommendationBadge({ rec }) {
+  const config = {
+    approve: { bg: 'var(--color-success-bg)', text: 'var(--color-success)', icon: CheckCircle, label: 'Approve' },
+    request_changes: { bg: 'var(--color-danger-bg)', text: 'var(--color-danger)', icon: XCircle, label: 'Request Changes' },
+    comment: { bg: 'var(--color-warning-bg)', text: 'var(--color-warning)', icon: MessageSquare, label: 'Comment' },
+  }
+  const c = config[rec] || { bg: 'var(--color-paper-3)', text: 'var(--color-ink-2)', icon: MessageSquare, label: rec }
+  const Icon = c.icon
+
+  return (
+    <span
+      className="inline-flex items-center gap-2xs font-medium"
+      style={{
+        fontSize: 'var(--text-sm)',
+        padding: '6px 14px',
+        borderRadius: 'var(--radius-md)',
+        background: c.bg,
+        color: c.text,
+      }}
+    >
+      <Icon className="w-3.5 h-3.5" />
+      {c.label}
+    </span>
+  )
+}
+
+/* ── PR Detail ───────────────────────────────────────────────────── */
 
 function PRDetail() {
   const { id } = useParams()
@@ -55,34 +282,91 @@ function PRDetail() {
     }
   }
 
+  const tabBase = {
+    padding: '8px 16px',
+    borderRadius: 'var(--radius-md)',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 500,
+    cursor: 'pointer',
+    border: 'none',
+    fontFamily: 'var(--font-body)',
+    transition: `all var(--dur-micro) var(--ease-out)`,
+  }
+
+  const btnPrimary = {
+    background: 'var(--color-accent)',
+    color: 'var(--color-accent-ink)',
+    border: 'none',
+    borderRadius: 'var(--radius-md)',
+    padding: '10px 20px',
+    fontSize: 'var(--text-sm)',
+    fontWeight: 600,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    fontFamily: 'var(--font-body)',
+    transition: `all var(--dur-short) var(--ease-out)`,
+  }
+
   return (
-    <div className="p-8 space-y-6 animate-fade-in">
+    <div className="p-lg space-y-md animate-fade-in" style={{ maxWidth: 1200 }}>
       {/* Header */}
-      <div className="flex items-start gap-4">
+      <div className="flex items-start gap-md">
         <Link
           to="/prs"
-          className="mt-1 w-9 h-9 rounded-lg border border-surface-border flex items-center justify-center text-dark-400 hover:text-dark-200 hover:border-dark-600 transition-all duration-150 flex-shrink-0"
+          className="flex items-center justify-center flex-shrink-0"
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--color-rule)',
+            color: 'var(--color-ink-3)',
+            textDecoration: 'none',
+            marginTop: 2,
+            transition: `all var(--dur-micro) var(--ease-out)`,
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.borderColor = 'var(--color-paper-4)'
+            e.currentTarget.style.color = 'var(--color-ink)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.borderColor = 'var(--color-rule)'
+            e.currentTarget.style.color = 'var(--color-ink-3)'
+          }}
         >
           <ArrowLeft className="w-4 h-4" />
         </Link>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-[11px] px-2 py-0.5 rounded-md bg-dark-800 text-dark-400 font-mono border border-surface-border">
+          <div className="flex items-center gap-2xs" style={{ marginBottom: 6 }}>
+            <span
+              className="font-mono"
+              style={{
+                fontSize: 'var(--text-xs)',
+                padding: '2px 8px',
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--color-paper-3)',
+                color: 'var(--color-ink-3)',
+                border: '1px solid var(--color-rule)',
+              }}
+            >
               {pr.repo}
             </span>
-            <span className="text-[11px] text-dark-500 font-mono">#{pr.azure_pr_id}</span>
+            <span className="font-mono" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-4)' }}>
+              #{pr.azure_pr_id}
+            </span>
             {pr.is_reviewer_required === 'yes' && (
-              <span className="text-[11px] px-2 py-0.5 rounded-md bg-red-500/10 text-red-400 font-medium">
+              <span className="font-medium" style={{ fontSize: 'var(--text-xs)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--color-danger-bg)', color: 'var(--color-danger)' }}>
                 Required Reviewer
               </span>
             )}
           </div>
-          <h2 className="text-lg font-semibold text-dark-50 tracking-tight leading-snug">
+          <h2 className="font-semibold tracking-tight leading-snug" style={{ fontSize: 'var(--text-lg)', color: 'var(--color-ink)', letterSpacing: '-0.02em' }}>
             {pr.title}
           </h2>
-          <div className="flex items-center gap-3 mt-1.5 text-[13px] text-dark-400">
+          <div className="flex items-center gap-sm flex-wrap" style={{ marginTop: 6, fontSize: 'var(--text-sm)', color: 'var(--color-ink-3)' }}>
             <span>{pr.author}</span>
-            <span className="text-dark-700">·</span>
+            <span style={{ color: 'var(--color-ink-4)' }}>·</span>
             <span className="font-mono">{pr.source_branch} → {pr.target_branch}</span>
           </div>
         </div>
@@ -90,7 +374,25 @@ function PRDetail() {
           href={pr.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-surface-secondary border border-surface-border rounded-lg text-[13px] text-dark-300 hover:text-dark-100 transition-all duration-150 flex-shrink-0"
+          className="flex items-center gap-2xs flex-shrink-0"
+          style={{
+            padding: '8px 16px',
+            background: 'var(--color-paper-2)',
+            border: '1px solid var(--color-rule)',
+            borderRadius: 'var(--radius-md)',
+            fontSize: 'var(--text-sm)',
+            color: 'var(--color-ink-2)',
+            textDecoration: 'none',
+            transition: `all var(--dur-micro) var(--ease-out)`,
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.borderColor = 'var(--color-paper-4)'
+            e.currentTarget.style.color = 'var(--color-ink)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.borderColor = 'var(--color-rule)'
+            e.currentTarget.style.color = 'var(--color-ink-2)'
+          }}
         >
           <ExternalLink className="w-3.5 h-3.5" />
           Azure DevOps
@@ -99,28 +401,28 @@ function PRDetail() {
 
       {/* Review Summary */}
       {review && (
-        <div className="bg-surface border border-surface-border rounded-xl p-6 animate-slide-up">
+        <div className="reveal" style={{ ...cardStyle, padding: 'var(--space-lg)' }}>
           {/* Top bar */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between flex-wrap gap-sm" style={{ marginBottom: 'var(--space-lg)' }}>
+            <div className="flex items-center gap-sm">
               <RecommendationBadge rec={review.recommendation} />
-              <span className="text-[12px] text-dark-500">
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-4)' }}>
                 {review.duration_seconds}s · {findings.length} finding{findings.length !== 1 ? 's' : ''}
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2xs">
               {highFindings.length > 0 && (
-                <span className="text-[11px] font-medium text-red-400 bg-red-500/10 px-2 py-1 rounded-md">
+                <span className="font-mono font-medium" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-danger)', background: 'var(--color-danger-bg)', padding: '4px 8px', borderRadius: 'var(--radius-sm)' }}>
                   {highFindings.length} HIGH
                 </span>
               )}
               {mediumFindings.length > 0 && (
-                <span className="text-[11px] font-medium text-amber-400 bg-amber-500/10 px-2 py-1 rounded-md">
+                <span className="font-mono font-medium" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-warning)', background: 'var(--color-warning-bg)', padding: '4px 8px', borderRadius: 'var(--radius-sm)' }}>
                   {mediumFindings.length} MED
                 </span>
               )}
               {lowFindings.length > 0 && (
-                <span className="text-[11px] font-medium text-blue-400 bg-blue-500/10 px-2 py-1 rounded-md">
+                <span className="font-mono font-medium" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-info)', background: 'var(--color-info-bg)', padding: '4px 8px', borderRadius: 'var(--radius-sm)' }}>
                   {lowFindings.length} LOW
                 </span>
               )}
@@ -128,7 +430,7 @@ function PRDetail() {
           </div>
 
           {/* Score Cards */}
-          <div className="grid grid-cols-5 gap-3 mb-5">
+          <div className="grid grid-cols-5 gap-xs" style={{ marginBottom: 'var(--space-md)' }}>
             {[
               { label: 'Logic', score: review.score_logic },
               { label: 'Security', score: review.score_security },
@@ -142,15 +444,34 @@ function PRDetail() {
 
           {/* Summary */}
           {review.summary && (
-            <div className="bg-dark-800/50 border border-surface-border rounded-lg p-4">
-              <p className="text-[13px] text-dark-300 leading-relaxed">{review.summary}</p>
+            <div
+              style={{
+                background: 'var(--color-paper-3)',
+                border: '1px solid var(--color-rule)',
+                borderRadius: 'var(--radius-md)',
+                padding: 'var(--space-sm) var(--space-md)',
+              }}
+            >
+              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-2)', lineHeight: 1.6 }}>
+                {review.summary}
+              </p>
             </div>
           )}
         </div>
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-surface border border-surface-border rounded-lg p-1 w-fit">
+      <div
+        className="flex"
+        style={{
+          gap: 4,
+          background: 'var(--color-paper-2)',
+          border: '1px solid var(--color-rule)',
+          borderRadius: 'var(--radius-md)',
+          padding: 4,
+          width: 'fit-content',
+        }}
+      >
         {[
           { id: 'findings', label: `Findings (${findings.length})` },
           { id: 'diff', label: 'Diff' },
@@ -158,11 +479,11 @@ function PRDetail() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2 rounded-md text-[13px] font-medium transition-all duration-150 ${
-              activeTab === tab.id
-                ? 'bg-dark-800 text-dark-100 shadow-sm'
-                : 'text-dark-400 hover:text-dark-200'
-            }`}
+            style={{
+              ...tabBase,
+              background: activeTab === tab.id ? 'var(--color-paper-3)' : 'transparent',
+              color: activeTab === tab.id ? 'var(--color-ink)' : 'var(--color-ink-3)',
+            }}
           >
             {tab.label}
           </button>
@@ -171,35 +492,51 @@ function PRDetail() {
 
       {/* Findings Tab */}
       {activeTab === 'findings' && (
-        <div className="space-y-3">
+        <div className="space-y-xs">
           {findings.length === 0 && review?.status === 'completed' ? (
-            <div className="bg-surface border border-surface-border rounded-xl">
-              <div className="flex flex-col items-center justify-center py-16 px-8">
-                <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center mb-4">
-                  <Shield className="w-6 h-6 text-emerald-400" />
+            <div style={cardStyle}>
+              <div className="flex flex-col items-center justify-center" style={{ padding: 'var(--space-3xl) var(--space-lg)' }}>
+                <div
+                  className="rounded-lg flex items-center justify-center"
+                  style={{ width: 48, height: 48, background: 'var(--color-success-bg)', marginBottom: 'var(--space-md)' }}
+                >
+                  <Shield className="w-5 h-5" style={{ color: 'var(--color-success)' }} />
                 </div>
-                <p className="text-dark-200 font-medium text-sm">No findings — clean review</p>
-                <p className="text-dark-500 text-[13px] mt-1">This PR passed all security checks.</p>
+                <p className="font-medium" style={{ fontSize: 'var(--text-base)', color: 'var(--color-ink-2)' }}>
+                  No findings — clean review
+                </p>
+                <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-3)', marginTop: 4 }}>
+                  This PR passed all security checks.
+                </p>
               </div>
             </div>
           ) : findings.length === 0 ? (
-            <div className="bg-surface border border-surface-border rounded-xl">
-              <div className="flex flex-col items-center justify-center py-16 px-8">
-                <div className="w-14 h-14 rounded-2xl bg-dark-800 flex items-center justify-center mb-4">
-                  <Clock className="w-6 h-6 text-dark-500" />
+            <div style={cardStyle}>
+              <div className="flex flex-col items-center justify-center" style={{ padding: 'var(--space-3xl) var(--space-lg)' }}>
+                <div
+                  className="rounded-lg flex items-center justify-center"
+                  style={{ width: 48, height: 48, background: 'var(--color-paper-3)', marginBottom: 'var(--space-md)' }}
+                >
+                  <Clock className="w-5 h-5" style={{ color: 'var(--color-ink-4)' }} />
                 </div>
-                <p className="text-dark-300 font-medium text-sm">Not yet reviewed</p>
-                <p className="text-dark-500 text-[13px] mt-1 mb-5 text-center max-w-xs">
+                <p className="font-medium" style={{ fontSize: 'var(--text-base)', color: 'var(--color-ink-2)' }}>
+                  Not yet reviewed
+                </p>
+                <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-3)', marginTop: 4, marginBottom: 'var(--space-md)', textAlign: 'center', maxWidth: 320 }}>
                   This PR was recorded without a review (old PR).
                 </p>
                 <button
                   onClick={handleRunReview}
                   disabled={runningReview}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-[13px] font-medium transition-all duration-150 active:scale-[0.98]"
+                  style={{
+                    ...btnPrimary,
+                    opacity: runningReview ? 0.6 : 1,
+                    cursor: runningReview ? 'not-allowed' : 'pointer',
+                  }}
                 >
                   {runningReview ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <Loader2 className="w-4 h-4" style={{ animation: 'spin 1s linear infinite' }} />
                       Running review...
                     </>
                   ) : (
@@ -219,156 +556,34 @@ function PRDetail() {
 
       {/* Diff Tab */}
       {activeTab === 'diff' && review?.raw_diff && (
-        <div className="bg-surface border border-surface-border rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-surface-border flex items-center gap-2">
-            <FileCode className="w-4 h-4 text-dark-500" />
-            <span className="text-[12px] text-dark-400 font-medium">Raw Diff</span>
+        <div style={{ ...cardStyle, overflow: 'hidden' }}>
+          <div
+            className="flex items-center gap-2xs"
+            style={{ padding: '10px var(--space-md)', borderBottom: '1px solid var(--color-rule)' }}
+          >
+            <FileCode className="w-4 h-4" style={{ color: 'var(--color-ink-4)' }} />
+            <span className="font-medium" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-3)' }}>Raw Diff</span>
           </div>
-          <div className="p-4 overflow-auto max-h-[600px]">
-            <pre className="text-[12px] font-mono text-dark-300 whitespace-pre-wrap leading-5">
+          <div className="overflow-auto" style={{ padding: 'var(--space-md)', maxHeight: 600 }}>
+            <pre className="font-mono" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-2)', whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
               {review.raw_diff.split('\n').map((line, i) => {
-                let cls = 'text-dark-400'
-                if (line.startsWith('+')) cls = 'text-emerald-400 bg-emerald-500/5'
-                else if (line.startsWith('-')) cls = 'text-red-400 bg-red-500/5'
-                else if (line.startsWith('@@')) cls = 'text-blue-400'
-                else if (line.startsWith('===')) cls = 'text-yellow-400 font-bold'
-                return <div key={i} className={`px-2 -mx-2 ${cls}`}>{line}</div>
+                let color = 'var(--color-ink-3)'
+                let bg = 'transparent'
+                if (line.startsWith('+')) { color = 'var(--color-success)'; bg = 'var(--color-success-bg)' }
+                else if (line.startsWith('-')) { color = 'var(--color-danger)'; bg = 'var(--color-danger-bg)' }
+                else if (line.startsWith('@@')) { color = 'var(--color-info)' }
+                else if (line.startsWith('===')) { color = 'var(--color-warning)' }
+                return (
+                  <div key={i} style={{ padding: '0 var(--space-xs)', margin: '0 calc(var(--space-xs) * -1)', color, background: bg }}>
+                    {line}
+                  </div>
+                )
               })}
             </pre>
           </div>
         </div>
       )}
     </div>
-  )
-}
-
-function ScoreCard({ label, score }) {
-  const pct = score != null ? (score / 10) * 100 : 0
-  const circumference = 2 * Math.PI * 20
-  const offset = circumference - (pct / 100) * circumference
-
-  let color = '#ef4444' // red
-  if (score >= 8) color = '#10b981' // emerald
-  else if (score >= 5) color = '#f59e0b' // amber
-
-  return (
-    <div className="flex flex-col items-center gap-2 py-2">
-      <div className="relative w-14 h-14">
-        <svg className="w-14 h-14 -rotate-90" viewBox="0 0 48 48">
-          <circle cx="24" cy="24" r="20" fill="none" stroke="#1e293b" strokeWidth="3" />
-          <circle
-            cx="24" cy="24" r="20" fill="none"
-            stroke={color}
-            strokeWidth="3"
-            strokeDasharray={circumference}
-            strokeDashoffset={offset}
-            strokeLinecap="round"
-            className="score-ring"
-          />
-        </svg>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-[15px] font-bold text-dark-100">
-            {score ?? '–'}
-          </span>
-        </div>
-      </div>
-      <span className="text-[11px] text-dark-500 font-medium">{label}</span>
-    </div>
-  )
-}
-
-function FindingCard({ finding, index }) {
-  const severityConfig = {
-    HIGH: {
-      border: 'border-red-500/30',
-      bg: 'bg-red-500/5',
-      badge: 'bg-red-500/15 text-red-400',
-      icon: AlertTriangle,
-    },
-    MEDIUM: {
-      border: 'border-amber-500/30',
-      bg: 'bg-amber-500/5',
-      badge: 'bg-amber-500/15 text-amber-400',
-      icon: AlertTriangle,
-    },
-    LOW: {
-      border: 'border-blue-500/30',
-      bg: 'bg-blue-500/5',
-      badge: 'bg-blue-500/15 text-blue-400',
-      icon: AlertTriangle,
-    },
-  }
-  const sev = severityConfig[finding.severity] || severityConfig.LOW
-
-  return (
-    <div
-      className={`border ${sev.border} ${sev.bg} rounded-xl p-5 animate-slide-up`}
-      style={{ animationDelay: `${index * 50}ms` }}
-    >
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-3">
-        <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wide ${sev.badge}`}>
-          {finding.severity}
-        </span>
-        <span className="text-[11px] px-2 py-0.5 rounded-md bg-dark-800 text-dark-400 border border-surface-border">
-          {finding.category}
-        </span>
-        {finding.owasp_tag && (
-          <span className="text-[11px] text-dark-500 font-mono">{finding.owasp_tag}</span>
-        )}
-        {finding.is_automated && (
-          <span className="text-[11px] px-2 py-0.5 rounded-md bg-violet-500/15 text-violet-400 font-medium">
-            Auto
-          </span>
-        )}
-      </div>
-
-      {/* File path */}
-      <div className="flex items-center gap-2 text-[13px] text-dark-300 mb-2 font-mono">
-        <FileCode className="w-3.5 h-3.5 text-dark-500 flex-shrink-0" />
-        <span className="truncate">{finding.file_path}:{finding.line_number}</span>
-      </div>
-
-      {/* Description */}
-      {finding.description && (
-        <p className="text-[13px] text-dark-300 mb-3 leading-relaxed">{finding.description}</p>
-      )}
-
-      {/* Code snippet */}
-      {finding.code_snippet && (
-        <div className="bg-dark-950 border border-surface-border rounded-lg p-3 mb-3 overflow-x-auto">
-          <code className="text-[12px] text-dark-200 font-mono leading-5">{finding.code_snippet}</code>
-        </div>
-      )}
-
-      {/* Fix suggestion */}
-      {finding.fix_suggestion && (
-        <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3">
-          <div className="flex items-center gap-2 mb-1.5">
-            <Wrench className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wide">Fix Suggestion</span>
-          </div>
-          <p className="text-[13px] text-dark-200 leading-relaxed">{finding.fix_suggestion}</p>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function RecommendationBadge({ rec }) {
-  const config = {
-    approve: { bg: 'bg-emerald-500/15', text: 'text-emerald-400', icon: CheckCircle, label: 'Approve' },
-    request_changes: { bg: 'bg-red-500/15', text: 'text-red-400', icon: XCircle, label: 'Request Changes' },
-    comment: { bg: 'bg-amber-500/15', text: 'text-amber-400', icon: MessageSquare, label: 'Comment' },
-  }
-  const c = config[rec] || { bg: 'bg-dark-700', text: 'text-dark-300', icon: MessageSquare, label: rec }
-  const Icon = c.icon
-
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium ${c.bg} ${c.text}`}>
-      <Icon className="w-3.5 h-3.5" />
-      {c.label}
-    </span>
   )
 }
 
