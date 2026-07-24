@@ -281,7 +281,7 @@ function Dashboard() {
       <section className="panel panel-live reveal" style={{ '--i': 0, padding: 'var(--space-xl)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 22rem), 1fr))', gap: 'var(--space-xl)', alignItems: 'center' }}>
         <div className="min-w-0">
           <p className="kicker">living orbit</p>
-          <h1 className="display-title" style={{ marginTop: 'var(--space-sm)' }}>
+          <h1 className="display-title hero-title" style={{ marginTop: 'var(--space-sm)' }}>
             Review system, awake and breathing.
           </h1>
           <p style={{ maxWidth: '62ch', marginTop: 'var(--space-md)', color: 'var(--color-ink-2)', fontSize: 'var(--text-md)', lineHeight: 1.75 }}>
