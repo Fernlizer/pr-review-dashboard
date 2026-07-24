@@ -15,7 +15,6 @@ import {
   Radar,
   Search,
   ShieldCheck,
-  Sparkles,
   XCircle,
 } from 'lucide-react'
 
@@ -278,17 +277,22 @@ function Dashboard() {
 
   return (
     <div className="page-frame" style={{ display: 'grid', gap: 'var(--space-lg)' }}>
-      <section className="panel panel-live reveal" style={{ '--i': 0, padding: 'var(--space-xl)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 22rem), 1fr))', gap: 'var(--space-xl)', alignItems: 'center' }}>
-        <div className="min-w-0">
-          <p className="kicker">living orbit</p>
-          <h1 className="display-title hero-title" style={{ marginTop: 'var(--space-sm)' }}>
-            Review system, awake and breathing.
-          </h1>
-          <p style={{ maxWidth: '62ch', marginTop: 'var(--space-md)', color: 'var(--color-ink-2)', fontSize: 'var(--text-md)', lineHeight: 1.75 }}>
-            Your private mission control for PR polling, changed-line review, scanner signals, LLM judgment, and Azure DevOps comments.
-          </p>
+      <section className="panel panel-live reveal" style={{ '--i': 0, padding: 'var(--space-md)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 18rem), 1fr))', gap: 'var(--space-md)', alignItems: 'center' }}>
+        <div className="flex items-center gap-sm min-w-0">
+          <span className={`signal-dot ${recentReviews.some(rv => rv.status === 'running') ? 'is-running' : ''}`} aria-hidden="true" />
+          <div className="min-w-0">
+            <p className="kicker">system status</p>
+            <p className="mono" style={{ marginTop: 'var(--space-2xs)', color: systemMood.tone, fontSize: 'var(--text-lg)', fontWeight: 800, letterSpacing: '-0.02em' }}>
+              {systemMood.label}
+            </p>
+            <p className="mono" style={{ marginTop: 'var(--space-2xs)', color: 'var(--color-ink-4)', fontSize: 'var(--text-xs)' }}>
+              {stats.total_reviews || 0} reviews · {stats.total_prs || 0} PRs · {stats.total_findings || 0} findings
+            </p>
+          </div>
+        </div>
 
-          <div style={{ marginTop: 'var(--space-xl)', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 'var(--space-xs)' }}>
+        <div className="min-w-0">
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 'var(--space-xs)' }}>
             <input
               type="url"
               value={prUrl}
@@ -296,7 +300,7 @@ function Dashboard() {
               onKeyDown={e => e.key === 'Enter' && handleSubmitUrl()}
               placeholder="Paste Azure DevOps PR URL"
               style={{
-                minHeight: 48,
+                minHeight: 46,
                 minWidth: 0,
                 border: '1px solid var(--color-rule)',
                 borderRadius: 'var(--radius-input)',
@@ -311,12 +315,12 @@ function Dashboard() {
               onClick={handleSubmitUrl}
               disabled={submitting || !prUrl.trim()}
               style={{
-                minHeight: 48,
+                minHeight: 46,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: 'var(--space-xs)',
-                padding: '0 var(--space-lg)',
+                padding: '0 var(--space-md)',
                 border: 0,
                 borderRadius: 'var(--radius-input)',
                 background: 'var(--color-accent)',
@@ -337,19 +341,6 @@ function Dashboard() {
               </p>
             </div>
           )}
-        </div>
-
-        <div style={{ display: 'grid', placeItems: 'center' }}>
-          <div className="living-orb" style={{ width: 260, height: 260 }}>
-            <div style={{ textAlign: 'center' }}>
-              <Sparkles className="w-7 h-7 mx-auto" style={{ color: systemMood.tone }} />
-              <p className="mono" style={{ marginTop: 'var(--space-md)', color: systemMood.tone, fontSize: 'var(--text-xs)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em' }}>
-                {systemMood.label}
-              </p>
-              <p className="mono" style={{ marginTop: 'var(--space-xs)', color: 'var(--color-ink)', fontSize: 'var(--text-3xl)', fontWeight: 800 }}>{stats.total_reviews || 0}</p>
-              <p className="mono" style={{ color: 'var(--color-ink-4)', fontSize: 'var(--text-xs)' }}>reviews logged</p>
-            </div>
-          </div>
         </div>
       </section>
 

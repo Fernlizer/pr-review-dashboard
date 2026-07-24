@@ -189,11 +189,6 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
-.hero-title {
-  font-size: var(--text-hero);
-  line-height: 1;
-}
-
 .muted {
   color: var(--color-ink-3);
 }
@@ -377,9 +372,6 @@ button:disabled {
     line-height: 1;
   }
 
-  .hero-title {
-    font-size: clamp(2.25rem, 12vw, 3.25rem);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

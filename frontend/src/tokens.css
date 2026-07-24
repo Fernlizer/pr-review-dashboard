@@ -58,7 +58,6 @@
   --text-xl:      1.5rem;
   --text-2xl:     1.875rem;
   --text-3xl:     2.5rem;
-  --text-hero:    clamp(2.6rem, 4.4vw, 4.7rem);
   --text-4xl:     clamp(2.4rem, 6vw, 5.8rem);
 
   /* ── Spacing ──────────────────────────────────────────────── */

@@ -26,6 +26,9 @@ The home page is a system overview and control surface:
 - recent review signals
 - risk/finding summary
 
+The dashboard must open directly with operational status and controls. Avoid
+large hero/banner copy; this is a single-operator tool, not a marketing page.
+
 ## Genre
 
 atmospheric + luxury
@@ -74,6 +77,7 @@ atmospheric + luxury
 ## Non-goals
 
 - Do not preserve the previous admin-card layout.
+- Do not add homepage hero banners or marketing-style headline blocks.
 - Do not add fake sci-fi chrome.
 - Do not invent product metrics.
 - Do not add a motion dependency unless a later task specifically needs it.
