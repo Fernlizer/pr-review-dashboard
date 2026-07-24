@@ -1,300 +1,123 @@
-/* Hallmark · genre: atmospheric · macrostructure: Workbench · design-system: design.md · designed-as-app */
+/* Hallmark · pre-emit critique: P5 H5 E4 S5 R4 V5 */
+/* Hallmark · genre: atmospheric · macrostructure: Scan Chamber · theme: custom Night Garden */
 
-import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
 import {
-  ArrowLeft, ExternalLink, Clock, Shield, AlertTriangle,
-  CheckCircle, XCircle, MessageSquare, FileCode, Wrench,
-  Loader2, Play
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle,
+  Clock,
+  FileCode,
+  GitBranch,
+  Loader2,
+  MessageSquare,
+  ExternalLink,
+  Radio,
+  RefreshCw,
+  Shield,
+  Wrench,
+  XCircle,
 } from 'lucide-react'
-
-/* ── Card base ───────────────────────────────────────────────────── */
-
-const cardStyle = {
-  background: 'var(--color-paper-2)',
-  border: '1px solid var(--color-rule)',
-  borderRadius: 'var(--radius-lg)',
-}
-
-const sectionLabel = {
-  fontSize: 'var(--text-xs)',
-  fontWeight: 600,
-  color: 'var(--color-ink-3)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.08em',
-  fontFamily: 'var(--font-mono)',
-}
-
-/* ── Loading skeleton ────────────────────────────────────────────── */
 
 function LoadingSkeleton() {
   return (
-    <div className="p-lg space-y-md animate-fade-in">
-      <div className="flex items-center gap-md">
-        <div className="skeleton" style={{ width: 36, height: 36, borderRadius: 'var(--radius-md)' }} />
-        <div className="space-y-2xs flex-1">
-          <div className="skeleton" style={{ height: 18, width: 120 }} />
-          <div className="skeleton" style={{ height: 24, width: 380 }} />
-          <div className="skeleton" style={{ height: 14, width: 240 }} />
-        </div>
-      </div>
-      <div style={{ ...cardStyle, padding: 'var(--space-lg)' }}>
-        <div className="skeleton" style={{ height: 240 }} />
-      </div>
+    <div className="page-frame" style={{ display: 'grid', gap: 'var(--space-md)' }}>
+      <div className="skeleton" style={{ height: 220 }} />
+      <div className="skeleton" style={{ height: 420 }} />
     </div>
   )
 }
 
-/* ── Score ring ──────────────────────────────────────────────────── */
-
-function ScoreCard({ label, score }) {
-  const pct = score != null ? (score / 10) * 100 : 0
-  const circumference = 2 * Math.PI * 20
-  const offset = circumference - (pct / 100) * circumference
-
-  let color = 'var(--color-danger)'
-  if (score >= 8) color = 'var(--color-success)'
-  else if (score >= 5) color = 'var(--color-warning)'
-
-  return (
-    <div className="flex flex-col items-center" style={{ gap: 8, padding: 'var(--space-xs) 0' }}>
-      <div className="relative" style={{ width: 52, height: 52 }}>
-        <svg style={{ width: 52, height: 52, transform: 'rotate(-90deg)' }} viewBox="0 0 48 48">
-          <circle cx="24" cy="24" r="20" fill="none" stroke="var(--color-paper-3)" strokeWidth="3" />
-          <circle
-            cx="24" cy="24" r="20" fill="none"
-            stroke={color}
-            strokeWidth="3"
-            strokeDasharray={circumference}
-            strokeDashoffset={offset}
-            strokeLinecap="round"
-            className="score-ring"
-          />
-        </svg>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span
-            className="font-bold font-mono"
-            style={{ fontSize: 'var(--text-md)', color: 'var(--color-ink)' }}
-          >
-            {score ?? '–'}
-          </span>
-        </div>
-      </div>
-      <span className="font-mono" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-3)' }}>
-        {label}
-      </span>
-    </div>
-  )
-}
-
-/* ── Finding card ────────────────────────────────────────────────── */
-
-function FindingCard({ finding, index }) {
-  const severityConfig = {
-    HIGH: {
-      border: 'var(--color-danger)',
-      bg: 'var(--color-danger-bg)',
-      badge: { bg: 'var(--color-danger-bg)', text: 'var(--color-danger)' },
-    },
-    MEDIUM: {
-      border: 'var(--color-warning)',
-      bg: 'var(--color-warning-bg)',
-      badge: { bg: 'var(--color-warning-bg)', text: 'var(--color-warning)' },
-    },
-    LOW: {
-      border: 'var(--color-info)',
-      bg: 'var(--color-info-bg)',
-      badge: { bg: 'var(--color-info-bg)', text: 'var(--color-info)' },
-    },
-  }
-  const sev = severityConfig[finding.severity] || severityConfig.LOW
-
-  return (
-    <div
-      className="reveal"
-      style={{
-        border: `1px solid ${sev.border}`,
-        background: sev.bg,
-        borderRadius: 'var(--radius-lg)',
-        padding: 'var(--space-md)',
-        '--i': index,
-      }}
-    >
-      {/* Header */}
-      <div className="flex items-center gap-2xs flex-wrap" style={{ marginBottom: 'var(--space-sm)' }}>
-        <span
-          className="font-bold uppercase font-mono"
-          style={{
-            fontSize: 'var(--text-xs)',
-            padding: '2px 8px',
-            borderRadius: 'var(--radius-sm)',
-            background: sev.badge.bg,
-            color: sev.badge.text,
-            letterSpacing: '0.05em',
-          }}
-        >
-          {finding.severity}
-        </span>
-        <span
-          className="font-mono"
-          style={{
-            fontSize: 'var(--text-xs)',
-            padding: '2px 8px',
-            borderRadius: 'var(--radius-sm)',
-            background: 'var(--color-paper-3)',
-            color: 'var(--color-ink-3)',
-            border: '1px solid var(--color-rule)',
-          }}
-        >
-          {finding.category}
-        </span>
-        {finding.owasp_tag && (
-          <span className="font-mono" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-4)' }}>
-            {finding.owasp_tag}
-          </span>
-        )}
-        {finding.is_automated && (
-          <span
-            className="font-medium"
-            style={{ fontSize: 'var(--text-xs)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--color-accent-bg)', color: 'var(--color-accent)' }}
-          >
-            Auto
-          </span>
-        )}
-      </div>
-
-      {/* File path */}
-      <div className="flex items-center gap-2xs" style={{ marginBottom: 8 }}>
-        <FileCode className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--color-ink-4)' }} />
-        <span className="font-mono truncate" style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-2)' }}>
-          {finding.file_path}:{finding.line_number}
-        </span>
-      </div>
-
-      {/* Description */}
-      {finding.description && (
-        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-2)', lineHeight: 1.6, marginBottom: 'var(--space-sm)' }}>
-          {finding.description}
-        </p>
-      )}
-
-      {/* Code snippet */}
-      {finding.code_snippet && (
-        <div
-          className="overflow-x-auto"
-          style={{
-            background: 'var(--color-paper)',
-            border: '1px solid var(--color-rule)',
-            borderRadius: 'var(--radius-md)',
-            padding: 'var(--space-xs) var(--space-sm)',
-            marginBottom: 'var(--space-sm)',
-          }}
-        >
-          <code className="font-mono" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-2)', lineHeight: 1.7 }}>
-            {finding.code_snippet}
-          </code>
-        </div>
-      )}
-
-      {/* Fix suggestion */}
-      {finding.fix_suggestion && (
-        <div
-          style={{
-            background: 'var(--color-success-bg)',
-            border: '1px solid var(--color-success)',
-            borderRadius: 'var(--radius-md)',
-            padding: 'var(--space-xs) var(--space-sm)',
-          }}
-        >
-          <div className="flex items-center gap-2xs" style={{ marginBottom: 6 }}>
-            <Wrench className="w-3.5 h-3.5" style={{ color: 'var(--color-success)' }} />
-            <span className="font-semibold uppercase font-mono" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-success)', letterSpacing: '0.06em' }}>
-              Fix Suggestion
-            </span>
-          </div>
-          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink)', lineHeight: 1.6 }}>
-            {finding.fix_suggestion}
-          </p>
-        </div>
-      )}
-    </div>
-  )
-}
-
-/* ── Recommendation badge ────────────────────────────────────────── */
-
-function RecommendationBadge({ rec, status }) {
-  if (status === 'running') {
+function RecommendationBadge({ review }) {
+  if (!review) return null
+  if (review.status === 'running') {
     return (
-      <span
-        className="inline-flex items-center gap-2xs font-medium"
-        style={{
-          fontSize: 'var(--text-sm)',
-          padding: '6px 14px',
-          borderRadius: 'var(--radius-md)',
-          background: 'var(--color-accent-bg)',
-          color: 'var(--color-accent)',
-        }}
-      >
-        <Loader2 className="w-4 h-4" style={{ animation: 'spin 1s linear infinite' }} />
-        Running
+      <span className="mono" style={badgeStyle('var(--color-accent-bg)', 'var(--color-accent)')}>
+        <Loader2 className="w-4 h-4" style={{ animation: 'orbit-turn 1.2s linear infinite' }} />
+        scanning
       </span>
     )
   }
-
-  if (status === 'failed') {
-    return (
-      <span
-        className="inline-flex items-center gap-2xs font-medium"
-        style={{
-          fontSize: 'var(--text-sm)',
-          padding: '6px 14px',
-          borderRadius: 'var(--radius-md)',
-          background: 'var(--color-danger-bg)',
-          color: 'var(--color-danger)',
-        }}
-      >
-        <XCircle className="w-4 h-4" />
-        Failed
-      </span>
-    )
+  if (review.status === 'failed') {
+    return <span className="mono" style={badgeStyle('var(--color-danger-bg)', 'var(--color-danger)')}><XCircle className="w-4 h-4" />failed</span>
   }
-
   const config = {
-    approve: { bg: 'var(--color-success-bg)', text: 'var(--color-success)', icon: CheckCircle, label: 'Approve' },
-    request_changes: { bg: 'var(--color-danger-bg)', text: 'var(--color-danger)', icon: XCircle, label: 'Request Changes' },
-    comment: { bg: 'var(--color-warning-bg)', text: 'var(--color-warning)', icon: MessageSquare, label: 'Comment' },
+    approve: ['clear', 'var(--color-success-bg)', 'var(--color-success)', CheckCircle],
+    request_changes: ['mutate', 'var(--color-danger-bg)', 'var(--color-danger)', XCircle],
+    comment: ['observe', 'var(--color-warning-bg)', 'var(--color-warning)', MessageSquare],
   }
-  const c = config[rec] || { bg: 'var(--color-paper-3)', text: 'var(--color-ink-2)', icon: MessageSquare, label: rec }
-  const Icon = c.icon
+  const [label, bg, fg, Icon] = config[review.recommendation] || [review.recommendation || 'reviewed', 'var(--color-paper-3)', 'var(--color-ink-3)', MessageSquare]
+  return <span className="mono" style={badgeStyle(bg, fg)}><Icon className="w-4 h-4" />{label}</span>
+}
 
+function ScoreCell({ label, value }) {
+  const score = Number(value || 0)
+  const tone = score >= 8 ? 'var(--color-success)' : score >= 5 ? 'var(--color-warning)' : 'var(--color-danger)'
   return (
-    <span
-      className="inline-flex items-center gap-2xs font-medium"
-      style={{
-        fontSize: 'var(--text-sm)',
-        padding: '6px 14px',
-        borderRadius: 'var(--radius-md)',
-        background: c.bg,
-        color: c.text,
-      }}
-    >
-      <Icon className="w-3.5 h-3.5" />
-      {c.label}
-    </span>
+    <div className="panel-soft" style={{ padding: 'var(--space-md)' }}>
+      <p className="mono" style={{ color: 'var(--color-ink-4)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>{label}</p>
+      <p className="mono" style={{ marginTop: 'var(--space-sm)', color: tone, fontSize: 'var(--text-2xl)', fontWeight: 800, lineHeight: 1 }}>{score.toFixed(1)}</p>
+    </div>
   )
 }
 
-/* ── PR Detail ───────────────────────────────────────────────────── */
+function FindingCard({ finding, selected, onSelect }) {
+  const tone = finding.severity === 'HIGH'
+    ? ['var(--color-danger)', 'var(--color-danger-bg)']
+    : finding.severity === 'MEDIUM'
+      ? ['var(--color-warning)', 'var(--color-warning-bg)']
+      : ['var(--color-info)', 'var(--color-info-bg)']
+
+  return (
+    <article className="panel-soft" style={{ padding: 'var(--space-md)', borderColor: tone[0] }}>
+      <div className="flex items-start gap-sm">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onSelect}
+          style={{ width: 18, height: 18, marginTop: 2, accentColor: tone[0] }}
+          aria-label={`Select finding ${finding.id}`}
+        />
+        <div className="min-w-0" style={{ flex: 1 }}>
+          <div className="flex items-center gap-xs flex-wrap">
+            <span className="mono" style={{ color: tone[0], background: tone[1], borderRadius: 'var(--radius-full)', padding: '0.35rem 0.65rem', fontSize: 'var(--text-xs)', fontWeight: 800 }}>
+              {finding.severity}
+            </span>
+            <span className="mono" style={{ color: 'var(--color-ink-4)', fontSize: 'var(--text-xs)' }}>{finding.category}</span>
+            {finding.owasp_tag && <span className="mono" style={{ color: 'var(--color-ink-4)', fontSize: 'var(--text-xs)' }}>{finding.owasp_tag}</span>}
+          </div>
+          <p style={{ marginTop: 'var(--space-sm)', color: 'var(--color-ink)', lineHeight: 1.65 }}>{finding.description}</p>
+          <div className="panel" style={{ marginTop: 'var(--space-sm)', padding: 'var(--space-sm)', borderRadius: 'var(--radius-md)', boxShadow: 'none' }}>
+            <p className="mono" style={{ color: 'var(--color-info)', fontSize: 'var(--text-xs)' }}>
+              {finding.file_path}:{finding.line_number}
+            </p>
+            {finding.code_snippet && (
+              <pre className="mono" style={{ marginTop: 'var(--space-xs)', color: 'var(--color-ink-2)', fontSize: 'var(--text-xs)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                {finding.code_snippet}
+              </pre>
+            )}
+          </div>
+          {finding.fix_suggestion && (
+            <div style={{ display: 'flex', gap: 'var(--space-xs)', marginTop: 'var(--space-sm)', color: 'var(--color-success)' }}>
+              <Wrench className="w-4 h-4 flex-shrink-0" />
+              <p style={{ color: 'var(--color-ink-2)', lineHeight: 1.6 }}>{finding.fix_suggestion}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </article>
+  )
+}
 
 function PRDetail() {
   const { id } = useParams()
   const [pr, setPr] = useState(null)
   const [activeTab, setActiveTab] = useState('findings')
-  const [runningReview, setRunningReview] = useState(false)
   const [selectedFindings, setSelectedFindings] = useState(new Set())
   const [commenting, setCommenting] = useState(false)
   const [commentResult, setCommentResult] = useState(null)
+  const [reviewing, setReviewing] = useState(false)
 
   const fetchPr = () => {
     fetch(`/api/prs/${id}`).then(r => r.json()).then(setPr)
@@ -312,12 +135,16 @@ function PRDetail() {
     return () => clearInterval(timer)
   }, [review?.status, id])
 
-  if (!pr) return <LoadingSkeleton />
-
   const findings = review?.findings || []
-  const highFindings = findings.filter(f => f.severity === 'HIGH')
-  const mediumFindings = findings.filter(f => f.severity === 'MEDIUM')
-  const lowFindings = findings.filter(f => f.severity === 'LOW')
+  const counts = useMemo(() => ({
+    high: findings.filter(f => f.severity === 'HIGH').length,
+    medium: findings.filter(f => f.severity === 'MEDIUM').length,
+    low: findings.filter(f => f.severity === 'LOW').length,
+  }), [findings])
+
+  const commentableIds = useMemo(() => findings.filter(f => ['HIGH', 'MEDIUM'].includes(f.severity)).map(f => f.id), [findings])
+
+  if (!pr) return <LoadingSkeleton />
 
   const toggleFinding = (findingId) => {
     setSelectedFindings(prev => {
@@ -328,15 +155,11 @@ function PRDetail() {
     })
   }
 
-  const toggleAll = () => {
-    if (selectedFindings.size === findings.length) {
-      setSelectedFindings(new Set())
-    } else {
-      setSelectedFindings(new Set(findings.map(f => f.id)))
-    }
+  const selectCommentable = () => {
+    setSelectedFindings(new Set(commentableIds))
   }
 
-  const handleCommentSelected = async () => {
+  const commentSelected = async () => {
     if (!review || selectedFindings.size === 0) return
     setCommenting(true)
     setCommentResult(null)
@@ -347,400 +170,237 @@ function PRDetail() {
         body: JSON.stringify({ finding_ids: Array.from(selectedFindings) }),
       })
       const data = await resp.json()
-      setCommentResult(data)
-      setSelectedFindings(new Set())
+      setCommentResult(resp.ok ? data : { errors: [data.detail || 'Failed to post comments'] })
     } catch (e) {
-      setCommentResult({ error: e.message })
+      setCommentResult({ errors: [e.message] })
     } finally {
       setCommenting(false)
     }
   }
 
-  const handleRunReview = async () => {
-    setRunningReview(true)
+  const runReview = async () => {
+    setReviewing(true)
     try {
       const resp = await fetch(`/api/prs/${id}/review`, { method: 'POST' })
       const data = await resp.json()
-      if (data.status === 'started') {
-        setTimeout(fetchPr, 500)
-      }
-    } catch (e) {
-      console.error(e)
+      if (data.status === 'started') setTimeout(fetchPr, 500)
     } finally {
-      setRunningReview(false)
+      setReviewing(false)
     }
   }
 
-  const tabBase = {
-    padding: '8px 16px',
-    borderRadius: 'var(--radius-md)',
-    fontSize: 'var(--text-sm)',
-    fontWeight: 500,
-    cursor: 'pointer',
-    border: 'none',
-    fontFamily: 'var(--font-body)',
-    transition: `all var(--dur-micro) var(--ease-out)`,
-  }
-
-  const btnPrimary = {
-    background: 'var(--color-accent)',
-    color: 'var(--color-accent-ink)',
-    border: 'none',
-    borderRadius: 'var(--radius-md)',
-    padding: '10px 20px',
-    fontSize: 'var(--text-sm)',
-    fontWeight: 600,
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    fontFamily: 'var(--font-body)',
-    transition: `all var(--dur-short) var(--ease-out)`,
-  }
-
   return (
-    <div className="p-lg space-y-md animate-fade-in" style={{ maxWidth: 1200 }}>
-      {/* Header */}
-      <div className="flex items-start gap-md">
-        <Link
-          to="/prs"
-          className="flex items-center justify-center flex-shrink-0"
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: 'var(--radius-md)',
-            border: '1px solid var(--color-rule)',
-            color: 'var(--color-ink-3)',
-            textDecoration: 'none',
-            marginTop: 2,
-            transition: `all var(--dur-micro) var(--ease-out)`,
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.borderColor = 'var(--color-paper-4)'
-            e.currentTarget.style.color = 'var(--color-ink)'
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.borderColor = 'var(--color-rule)'
-            e.currentTarget.style.color = 'var(--color-ink-3)'
-          }}
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </Link>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2xs" style={{ marginBottom: 6 }}>
-            <span
-              className="font-mono"
-              style={{
-                fontSize: 'var(--text-xs)',
-                padding: '2px 8px',
-                borderRadius: 'var(--radius-sm)',
-                background: 'var(--color-paper-3)',
-                color: 'var(--color-ink-3)',
-                border: '1px solid var(--color-rule)',
-              }}
-            >
-              {pr.repo}
-            </span>
-            <span className="font-mono" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-4)' }}>
-              #{pr.azure_pr_id}
-            </span>
-            {pr.is_reviewer_required === 'yes' && (
-              <span className="font-medium" style={{ fontSize: 'var(--text-xs)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--color-danger-bg)', color: 'var(--color-danger)' }}>
-                Required Reviewer
-              </span>
+    <div className="page-frame" style={{ display: 'grid', gap: 'var(--space-lg)' }}>
+      <Link to="/prs" className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-xs)', color: 'var(--color-ink-3)', textDecoration: 'none', width: 'fit-content', whiteSpace: 'nowrap' }}>
+        <ArrowLeft className="w-4 h-4" />
+        back to signals
+      </Link>
+
+      <section className={`panel ${review?.status === 'running' ? 'panel-live' : ''} reveal`} style={{ padding: 'var(--space-xl)' }}>
+        <div className="flex items-start justify-between gap-lg flex-wrap">
+          <div className="min-w-0" style={{ flex: '1 1 34rem' }}>
+            <div className="flex items-center gap-xs flex-wrap">
+              <p className="kicker">scan chamber</p>
+              <RecommendationBadge review={review} />
+            </div>
+            <h1 className="display-title" style={{ marginTop: 'var(--space-sm)', fontSize: 'clamp(2rem, 4vw, 4rem)' }}>
+              {pr.title}
+            </h1>
+            <div className="flex items-center gap-sm flex-wrap" style={{ marginTop: 'var(--space-md)', color: 'var(--color-ink-3)' }}>
+              <span className="mono">{pr.repo} #{pr.azure_pr_id}</span>
+              <span>·</span>
+              <span>{pr.author || 'Unknown author'}</span>
+              <span>·</span>
+              <span className="flex items-center gap-2xs"><GitBranch className="w-4 h-4" /> {pr.source_branch} → {pr.target_branch}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-sm flex-wrap">
+            {pr.url && (
+              <a
+                href={pr.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={externalButton}
+                aria-label={`Open Azure DevOps PR #${pr.azure_pr_id} in a new tab`}
+              >
+                <ExternalLink className="w-4 h-4" />
+                Open PR
+              </a>
             )}
-          </div>
-          <h2 className="font-semibold tracking-tight leading-snug" style={{ fontSize: 'var(--text-lg)', color: 'var(--color-ink)', letterSpacing: '-0.02em' }}>
-            {pr.title}
-          </h2>
-          <div className="flex items-center gap-sm flex-wrap" style={{ marginTop: 6, fontSize: 'var(--text-sm)', color: 'var(--color-ink-3)' }}>
-            <span>{pr.author}</span>
-            <span style={{ color: 'var(--color-ink-4)' }}>·</span>
-            <span className="font-mono">{pr.source_branch} → {pr.target_branch}</span>
-          </div>
-        </div>
-        <a
-          href={pr.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2xs flex-shrink-0"
-          style={{
-            padding: '8px 16px',
-            background: 'var(--color-paper-2)',
-            border: '1px solid var(--color-rule)',
-            borderRadius: 'var(--radius-md)',
-            fontSize: 'var(--text-sm)',
-            color: 'var(--color-ink-2)',
-            textDecoration: 'none',
-            transition: `all var(--dur-micro) var(--ease-out)`,
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.borderColor = 'var(--color-paper-4)'
-            e.currentTarget.style.color = 'var(--color-ink)'
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.borderColor = 'var(--color-rule)'
-            e.currentTarget.style.color = 'var(--color-ink-2)'
-          }}
-        >
-          <ExternalLink className="w-3.5 h-3.5" />
-          Azure DevOps
-        </a>
-      </div>
-
-      {/* Review Summary */}
-      {review && (
-        <div className="reveal" style={{ ...cardStyle, padding: 'var(--space-lg)' }}>
-          {/* Top bar */}
-          <div className="flex items-center justify-between flex-wrap gap-sm" style={{ marginBottom: 'var(--space-lg)' }}>
-            <div className="flex items-center gap-sm">
-              <RecommendationBadge rec={review.recommendation} status={review.status} />
-              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-4)' }}>
-                {review.status === 'running' ? 'Running review' : `${review.duration_seconds ?? 0}s · ${findings.length} finding${findings.length !== 1 ? 's' : ''}`}
-              </span>
-            </div>
-            <div className="flex items-center gap-2xs">
-              {highFindings.length > 0 && (
-                <span className="font-mono font-medium" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-danger)', background: 'var(--color-danger-bg)', padding: '4px 8px', borderRadius: 'var(--radius-sm)' }}>
-                  {highFindings.length} HIGH
-                </span>
-              )}
-              {mediumFindings.length > 0 && (
-                <span className="font-mono font-medium" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-warning)', background: 'var(--color-warning-bg)', padding: '4px 8px', borderRadius: 'var(--radius-sm)' }}>
-                  {mediumFindings.length} MED
-                </span>
-              )}
-              {lowFindings.length > 0 && (
-                <span className="font-mono font-medium" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-info)', background: 'var(--color-info-bg)', padding: '4px 8px', borderRadius: 'var(--radius-sm)' }}>
-                  {lowFindings.length} LOW
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Score Cards */}
-          <div className="grid grid-cols-5 gap-xs" style={{ marginBottom: 'var(--space-md)' }}>
-            {[
-              { label: 'Logic', score: review.score_logic },
-              { label: 'Security', score: review.score_security },
-              { label: 'Tests', score: review.score_tests },
-              { label: 'Style', score: review.score_style },
-              { label: 'Architecture', score: review.score_architecture },
-            ].map(({ label, score }) => (
-              <ScoreCard key={label} label={label} score={score} />
-            ))}
-          </div>
-
-          {/* Summary */}
-          {review.summary && (
-            <div
-              style={{
-                background: 'var(--color-paper-3)',
-                border: '1px solid var(--color-rule)',
-                borderRadius: 'var(--radius-md)',
-                padding: 'var(--space-sm) var(--space-md)',
-              }}
+            <button
+              onClick={runReview}
+              disabled={reviewing || review?.status === 'running'}
+              style={primaryButton}
             >
-              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-2)', lineHeight: 1.6 }}>
-                {review.summary}
-              </p>
-            </div>
-          )}
+              {reviewing || review?.status === 'running' ? <Loader2 className="w-4 h-4" style={{ animation: 'orbit-turn 1.2s linear infinite' }} /> : <RefreshCw className="w-4 h-4" />}
+              {review?.status === 'running' ? 'Scanning' : 'Run review'}
+            </button>
+          </div>
         </div>
-      )}
 
-      {/* Tabs */}
-      <div
-        className="flex"
-        style={{
-          gap: 4,
-          background: 'var(--color-paper-2)',
-          border: '1px solid var(--color-rule)',
-          borderRadius: 'var(--radius-md)',
-          padding: 4,
-          width: 'fit-content',
-        }}
-      >
-        {[
-          { id: 'findings', label: `Findings (${findings.length})` },
-          { id: 'diff', label: 'Diff' },
-        ].map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            style={{
-              ...tabBase,
-              background: activeTab === tab.id ? 'var(--color-paper-3)' : 'transparent',
-              color: activeTab === tab.id ? 'var(--color-ink)' : 'var(--color-ink-3)',
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+        {review && (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-sm" style={{ marginTop: 'var(--space-xl)' }}>
+            <ScoreCell label="logic" value={review.score_logic} />
+            <ScoreCell label="security" value={review.score_security} />
+            <ScoreCell label="tests" value={review.score_tests} />
+            <ScoreCell label="style" value={review.score_style} />
+            <ScoreCell label="arch" value={review.score_architecture} />
+          </div>
+        )}
+      </section>
 
-      {/* Findings Tab */}
-      {activeTab === 'findings' && (
-        <div className="space-y-xs">
-          {findings.length === 0 && review?.status === 'completed' ? (
-            <div style={cardStyle}>
-              <div className="flex flex-col items-center justify-center" style={{ padding: 'var(--space-3xl) var(--space-lg)' }}>
-                <div
-                  className="rounded-lg flex items-center justify-center"
-                  style={{ width: 48, height: 48, background: 'var(--color-success-bg)', marginBottom: 'var(--space-md)' }}
-                >
-                  <Shield className="w-5 h-5" style={{ color: 'var(--color-success)' }} />
-                </div>
-                <p className="font-medium" style={{ fontSize: 'var(--text-base)', color: 'var(--color-ink-2)' }}>
-                  No findings — clean review
-                </p>
-                <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-3)', marginTop: 4 }}>
-                  This PR passed all security checks.
-                </p>
+      {review ? (
+        <>
+          <section className="grid grid-cols-1 xl:grid-cols-[0.9fr_1.1fr] gap-md">
+            <div className="panel reveal" style={{ padding: 'var(--space-lg)' }}>
+              <p className="kicker">summary signal</p>
+              <p style={{ marginTop: 'var(--space-md)', color: 'var(--color-ink-2)', fontSize: 'var(--text-md)', lineHeight: 1.75 }}>
+                {review.summary || (review.status === 'running' ? 'Review is running...' : 'No summary available.')}
+              </p>
+              <div className="grid grid-cols-3 gap-sm" style={{ marginTop: 'var(--space-lg)' }}>
+                <RiskPill label="high" value={counts.high} color="var(--color-danger)" />
+                <RiskPill label="medium" value={counts.medium} color="var(--color-warning)" />
+                <RiskPill label="low" value={counts.low} color="var(--color-info)" />
               </div>
             </div>
-          ) : findings.length === 0 ? (
-            <div style={cardStyle}>
-              <div className="flex flex-col items-center justify-center" style={{ padding: 'var(--space-3xl) var(--space-lg)' }}>
-                <div
-                  className="rounded-lg flex items-center justify-center"
-                  style={{ width: 48, height: 48, background: 'var(--color-paper-3)', marginBottom: 'var(--space-md)' }}
-                >
-                  <Clock className="w-5 h-5" style={{ color: 'var(--color-ink-4)' }} />
-                </div>
-                <p className="font-medium" style={{ fontSize: 'var(--text-base)', color: 'var(--color-ink-2)' }}>
-                  Not yet reviewed
-                </p>
-                <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-3)', marginTop: 4, marginBottom: 'var(--space-md)', textAlign: 'center', maxWidth: 320 }}>
-                  This PR was recorded without a review (old PR).
-                </p>
-                <button
-                  onClick={handleRunReview}
-                  disabled={runningReview}
-                  style={{
-                    ...btnPrimary,
-                    opacity: runningReview ? 0.6 : 1,
-                    cursor: runningReview ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  {runningReview ? (
-                    <>
-                      <Loader2 className="w-4 h-4" style={{ animation: 'spin 1s linear infinite' }} />
-                      Running review...
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-4 h-4" />
-                      Run Review
-                    </>
-                  )}
+
+            <div className="panel reveal" style={{ padding: 'var(--space-lg)' }}>
+              <p className="kicker">comment operation</p>
+              <p style={{ marginTop: 'var(--space-md)', color: 'var(--color-ink-3)', lineHeight: 1.65 }}>
+                Select HIGH/MEDIUM findings and post inline comments to the reviewed Azure iteration. Dedup remains backend-controlled.
+              </p>
+              <div className="flex items-center gap-sm flex-wrap" style={{ marginTop: 'var(--space-lg)' }}>
+                <button onClick={selectCommentable} disabled={!commentableIds.length} style={secondaryButton}>
+                  select risky lines
+                </button>
+                <button onClick={commentSelected} disabled={commenting || selectedFindings.size === 0} style={primaryButton}>
+                  {commenting ? <Loader2 className="w-4 h-4" style={{ animation: 'orbit-turn 1.2s linear infinite' }} /> : <MessageSquare className="w-4 h-4" />}
+                  comment {selectedFindings.size || ''}
                 </button>
               </div>
-            </div>
-          ) : (
-            <>
-              {/* Select All + Comment Selected bar */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-sm)' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2xs)', cursor: 'pointer', fontSize: 'var(--text-sm)', color: 'var(--color-ink-2)' }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedFindings.size === findings.length && findings.length > 0}
-                    onChange={toggleAll}
-                    style={{ accentColor: 'var(--color-accent)', width: 16, height: 16 }}
-                  />
-                  Select All ({selectedFindings.size}/{findings.length})
-                </label>
-
-                {selectedFindings.size > 0 && (
-                  <button
-                    onClick={handleCommentSelected}
-                    disabled={commenting}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 'var(--space-2xs)',
-                      padding: 'var(--space-2xs) var(--space-md)',
-                      background: 'var(--color-accent)', color: 'var(--color-accent-ink)',
-                      border: 'none', borderRadius: 'var(--radius-input)',
-                      fontSize: 'var(--text-sm)', fontWeight: 600, cursor: 'pointer',
-                      opacity: commenting ? 0.6 : 1,
-                    }}
-                  >
-                    {commenting ? (
-                      <><Loader2 className="w-4 h-4" style={{ animation: 'spin 1s linear infinite' }} /> Posting...</>
-                    ) : (
-                      <><MessageSquare className="w-4 h-4" /> Comment Selected ({selectedFindings.size})</>
-                    )}
-                  </button>
-                )}
-              </div>
-
-              {/* Comment result */}
               {commentResult && (
-                <div style={{
-                  padding: 'var(--space-sm)', borderRadius: 'var(--radius-card)',
-                  marginBottom: 'var(--space-sm)',
-                  background: commentResult.error ? 'rgba(255,80,80,0.1)' : 'rgba(80,200,120,0.1)',
-                  border: `1px solid ${commentResult.error ? 'rgba(255,80,80,0.2)' : 'rgba(80,200,120,0.2)'}`,
-                  fontSize: 'var(--text-sm)', color: 'var(--color-ink)',
-                }}>
-                  {commentResult.error
-                    ? `❌ Error: ${commentResult.error}`
-                    : `✅ Posted: ${commentResult.posted} | Skipped: ${commentResult.skipped}${commentResult.errors?.length ? ` | Errors: ${commentResult.errors.length}` : ''}`
-                  }
+                <div className="panel-soft" style={{ marginTop: 'var(--space-md)', padding: 'var(--space-sm)' }}>
+                  <p style={{ color: commentResult.errors?.length ? 'var(--color-warning)' : 'var(--color-accent)' }}>
+                    Posted {commentResult.posted || 0}, skipped {commentResult.skipped || 0}
+                  </p>
+                  {commentResult.errors?.map((err, i) => <p key={i} style={{ color: 'var(--color-danger)', marginTop: 'var(--space-2xs)' }}>{err}</p>)}
                 </div>
               )}
+            </div>
+          </section>
 
-              {findings.map((f, i) => (
-                <div key={f.id} style={{ display: 'flex', gap: 'var(--space-sm)', alignItems: 'flex-start' }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedFindings.has(f.id)}
-                    onChange={() => toggleFinding(f.id)}
-                    style={{
-                      accentColor: 'var(--color-accent)', width: 16, height: 16,
-                      marginTop: 'var(--space-sm)', flexShrink: 0,
-                    }}
-                  />
-                  <div style={{ flex: 1 }}>
-                    <FindingCard finding={f} index={i} />
-                  </div>
-                </div>
+          <section className="panel reveal" style={{ overflow: 'hidden' }}>
+            <div className="flex items-center gap-xs flex-wrap" style={{ padding: 'var(--space-md)', borderBottom: '1px solid var(--color-rule)' }}>
+              {[
+                ['findings', 'Anomalies', AlertTriangle],
+                ['diff', 'Raw diff', FileCode],
+              ].map(([key, label, Icon]) => (
+                <button
+                  key={key}
+                  onClick={() => setActiveTab(key)}
+                  style={{
+                    minHeight: 40,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--space-xs)',
+                    border: '1px solid var(--color-rule)',
+                    borderRadius: 'var(--radius-full)',
+                    background: activeTab === key ? 'var(--color-accent-bg)' : 'transparent',
+                    color: activeTab === key ? 'var(--color-accent)' : 'var(--color-ink-3)',
+                    padding: '0 var(--space-md)',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <Icon className="w-4 h-4" />
+                  {label}
+                </button>
               ))}
-            </>
-          )}
-        </div>
-      )}
+            </div>
 
-      {/* Diff Tab */}
-      {activeTab === 'diff' && review?.raw_diff && (
-        <div style={{ ...cardStyle, overflow: 'hidden' }}>
-          <div
-            className="flex items-center gap-2xs"
-            style={{ padding: '10px var(--space-md)', borderBottom: '1px solid var(--color-rule)' }}
-          >
-            <FileCode className="w-4 h-4" style={{ color: 'var(--color-ink-4)' }} />
-            <span className="font-medium" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-3)' }}>Raw Diff</span>
-          </div>
-          <div className="overflow-auto" style={{ padding: 'var(--space-md)', maxHeight: 600 }}>
-            <pre className="font-mono" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-2)', whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
-              {review.raw_diff.split('\n').map((line, i) => {
-                let color = 'var(--color-ink-3)'
-                let bg = 'transparent'
-                if (line.startsWith('+')) { color = 'var(--color-success)'; bg = 'var(--color-success-bg)' }
-                else if (line.startsWith('-')) { color = 'var(--color-danger)'; bg = 'var(--color-danger-bg)' }
-                else if (line.startsWith('@@')) { color = 'var(--color-info)' }
-                else if (line.startsWith('===')) { color = 'var(--color-warning)' }
-                return (
-                  <div key={i} style={{ padding: '0 var(--space-xs)', margin: '0 calc(var(--space-xs) * -1)', color, background: bg }}>
-                    {line}
+            {activeTab === 'findings' ? (
+              <div style={{ padding: 'var(--space-md)', display: 'grid', gap: 'var(--space-sm)' }}>
+                {findings.length ? findings.map(f => (
+                  <FindingCard key={f.id} finding={f} selected={selectedFindings.has(f.id)} onSelect={() => toggleFinding(f.id)} />
+                )) : (
+                  <div style={{ padding: 'var(--space-3xl)', textAlign: 'center' }}>
+                    <Shield className="w-8 h-8 mx-auto" style={{ color: 'var(--color-success)' }} />
+                    <p style={{ marginTop: 'var(--space-md)', color: 'var(--color-ink)', fontWeight: 800 }}>
+                      {review.status === 'running' ? 'The scan is still breathing.' : 'No changed-line anomalies found.'}
+                    </p>
+                    <p style={{ color: 'var(--color-ink-3)', marginTop: 'var(--space-2xs)' }}>
+                      {review.status === 'running' ? 'Findings will appear here when scanners finish.' : 'This review did not produce findings.'}
+                    </p>
                   </div>
-                )
-              })}
-            </pre>
-          </div>
-        </div>
+                )}
+              </div>
+            ) : (
+              <pre className="mono" style={{ margin: 0, padding: 'var(--space-md)', color: 'var(--color-ink-2)', fontSize: 'var(--text-xs)', lineHeight: 1.75, maxHeight: 620, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                {review.raw_diff || 'No raw diff stored for this review.'}
+              </pre>
+            )}
+          </section>
+        </>
+      ) : (
+        <section className="panel" style={{ padding: 'var(--space-3xl)', textAlign: 'center' }}>
+          <Clock className="w-8 h-8 mx-auto" style={{ color: 'var(--color-ink-4)' }} />
+          <p style={{ marginTop: 'var(--space-md)', color: 'var(--color-ink)', fontWeight: 800 }}>This PR has not been reviewed yet.</p>
+          <p style={{ color: 'var(--color-ink-3)', marginTop: 'var(--space-2xs)' }}>Run review to open a scan chamber.</p>
+        </section>
       )}
     </div>
   )
+}
+
+function RiskPill({ label, value, color }) {
+  return (
+    <div className="panel-soft" style={{ padding: 'var(--space-sm)' }}>
+      <p className="mono" style={{ color, fontSize: 'var(--text-xl)', fontWeight: 800, lineHeight: 1 }}>{value}</p>
+      <p className="mono" style={{ color: 'var(--color-ink-4)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.12em', marginTop: 'var(--space-xs)' }}>{label}</p>
+    </div>
+  )
+}
+
+const badgeStyle = (bg, fg) => ({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 'var(--space-2xs)',
+  padding: '0.45rem 0.75rem',
+  borderRadius: 'var(--radius-full)',
+  background: bg,
+  color: fg,
+  fontSize: 'var(--text-xs)',
+  fontWeight: 800,
+  textTransform: 'uppercase',
+  letterSpacing: '0.08em',
+})
+
+const primaryButton = {
+  minHeight: 44,
+  display: 'flex',
+  alignItems: 'center',
+  gap: 'var(--space-xs)',
+  border: 0,
+  borderRadius: 'var(--radius-input)',
+  background: 'var(--color-accent)',
+  color: 'var(--color-accent-ink)',
+  padding: '0 var(--space-md)',
+  fontWeight: 800,
+  whiteSpace: 'nowrap',
+}
+
+const secondaryButton = {
+  ...primaryButton,
+  border: '1px solid var(--color-rule)',
+  background: 'var(--color-paper-3)',
+  color: 'var(--color-ink-2)',
+}
+
+const externalButton = {
+  ...primaryButton,
+  border: '1px solid var(--color-rule-living)',
+  background: 'var(--color-accent-bg)',
+  color: 'var(--color-accent)',
+  textDecoration: 'none',
 }
 
 export default PRDetail

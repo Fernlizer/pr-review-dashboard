@@ -1,207 +1,218 @@
-/* Hallmark · genre: atmospheric · macrostructure: Workbench · design-system: design.md · designed-as-app */
+/* Hallmark · pre-emit critique: P5 H5 E4 S5 R4 V5 */
+/* Hallmark · genre: atmospheric · macrostructure: Living Orbit Workbench · theme: custom Night Garden · audience: single operator */
 
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  GitPullRequest, FileSearch, AlertTriangle, Flame,
-  CheckCircle, XCircle, MessageSquare, ArrowUpRight,
-  Loader2, Search
+  AlertTriangle,
+  ArrowUpRight,
+  CheckCircle,
+  FileSearch,
+  Flame,
+  GitPullRequest,
+  Loader2,
+  MessageSquare,
+  Radar,
+  Search,
+  ShieldCheck,
+  XCircle,
 } from 'lucide-react'
 
-/* ── Card base ───────────────────────────────────────────────────── */
-
-const cardStyle = {
-  background: 'var(--color-paper-2)',
-  border: '1px solid var(--color-rule)',
-  borderRadius: 'var(--radius-lg)',
+const badgeTone = {
+  approve: { label: 'clear', bg: 'var(--color-success-bg)', fg: 'var(--color-success)', Icon: CheckCircle },
+  request_changes: { label: 'mutate', bg: 'var(--color-danger-bg)', fg: 'var(--color-danger)', Icon: XCircle },
+  comment: { label: 'observe', bg: 'var(--color-warning-bg)', fg: 'var(--color-warning)', Icon: MessageSquare },
 }
-
-const sectionLabel = {
-  fontSize: 'var(--text-xs)',
-  fontWeight: 600,
-  color: 'var(--color-ink-3)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.08em',
-  fontFamily: 'var(--font-mono)',
-}
-
-/* ── Loading skeleton ────────────────────────────────────────────── */
 
 function LoadingSkeleton() {
   return (
-    <div className="p-lg space-y-lg animate-fade-in">
-      <div className="space-y-2xs">
-        <div className="skeleton" style={{ height: 28, width: 180 }} />
-        <div className="skeleton" style={{ height: 16, width: 260 }} />
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-sm">
-        {[...Array(4)].map((_, i) => (
-          <div key={i} style={{ ...cardStyle, padding: 'var(--space-md)' }}>
-            <div className="skeleton" style={{ height: 14, width: 72, marginBottom: 12 }} />
-            <div className="skeleton" style={{ height: 32, width: 56 }} />
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-sm">
-        <div className="md:col-span-3" style={{ ...cardStyle, padding: 'var(--space-md)' }}>
-          <div className="skeleton" style={{ height: 120 }} />
-        </div>
-        <div className="md:col-span-2" style={{ ...cardStyle, padding: 'var(--space-md)' }}>
-          <div className="skeleton" style={{ height: 120 }} />
-        </div>
+    <div className="page-frame" style={{ display: 'grid', gap: 'var(--space-lg)' }}>
+      <div className="skeleton" style={{ height: 220 }} />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-md">
+        <div className="skeleton" style={{ height: 240 }} />
+        <div className="skeleton lg:col-span-2" style={{ height: 240 }} />
       </div>
     </div>
   )
 }
 
-/* ── Stat Card ───────────────────────────────────────────────────── */
-
-function StatCard({ label, value, icon: Icon, accentVar }) {
-  return (
-    <div
-      className="group"
-      style={{ ...cardStyle, padding: 'var(--space-md)', transition: `border-color var(--dur-micro) var(--ease-out)` }}
-      onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--color-paper-4)'}
-      onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--color-rule)'}
-    >
-      <div className="flex items-center justify-between" style={{ marginBottom: 'var(--space-sm)' }}>
-        <span className="font-medium" style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-3)' }}>
-          {label}
-        </span>
-        <div
-          className="rounded-md flex items-center justify-center"
-          style={{ width: 28, height: 28, background: 'var(--color-accent-bg)' }}
-        >
-          <Icon className="w-3.5 h-3.5" style={{ color: `var(${accentVar})` }} />
-        </div>
-      </div>
-      <p
-        className="font-bold tracking-tight font-mono"
-        style={{
-          fontSize: 'var(--text-2xl)',
-          color: 'var(--color-ink)',
-          lineHeight: 1,
-          fontVariantNumeric: 'tabular-nums',
-        }}
-      >
-        {value}
-      </p>
-    </div>
-  )
-}
-
-/* ── Recommendation card ─────────────────────────────────────────── */
-
-function RecommendationCard({ label, value, icon: Icon, accentVar }) {
-  return (
-    <div style={{ ...cardStyle, padding: '10px var(--space-md)', display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
-      <div
-        className="rounded-md flex items-center justify-center flex-shrink-0"
-        style={{ width: 32, height: 32, background: 'var(--color-accent-bg)' }}
-      >
-        <Icon className="w-4 h-4" style={{ color: `var(${accentVar})` }} />
-      </div>
-      <div>
-        <p
-          className="font-bold leading-none font-mono"
-          style={{ fontSize: 'var(--text-lg)', color: 'var(--color-ink)', fontVariantNumeric: 'tabular-nums' }}
-        >
-          {value}
-        </p>
-        <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-3)', marginTop: 2 }}>{label}</p>
-      </div>
-    </div>
-  )
-}
-
-/* ── Severity bar ────────────────────────────────────────────────── */
-
-function SeverityBar({ label, count, total, accentVar }) {
-  const pct = total > 0 ? (count / total) * 100 : 0
-  return (
-    <div className="flex items-center gap-sm">
-      <span className="flex-shrink-0 font-mono" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-3)', width: 56 }}>
-        {label}
-      </span>
-      <div className="flex-1 overflow-hidden" style={{ height: 6, background: 'var(--color-paper-3)', borderRadius: 'var(--radius-full)' }}>
-        <div
-          style={{
-            height: '100%',
-            width: `${Math.max(pct, count > 0 ? 8 : 0)}%`,
-            background: `var(${accentVar})`,
-            borderRadius: 'var(--radius-full)',
-            transition: 'width 0.7s var(--ease-out)',
-          }}
-        />
-      </div>
-      <span className="font-medium text-right font-mono" style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-2)', width: 32 }}>
-        {count}
-      </span>
-    </div>
-  )
-}
-
-/* ── Empty state ─────────────────────────────────────────────────── */
-
-function EmptyState({ icon: Icon, title, description }) {
-  return (
-    <div className="flex flex-col items-center justify-center" style={{ padding: 'var(--space-3xl) var(--space-lg)' }}>
-      <div
-        className="rounded-lg flex items-center justify-center"
-        style={{ width: 48, height: 48, background: 'var(--color-paper-3)', marginBottom: 'var(--space-md)' }}
-      >
-        <Icon className="w-5 h-5" style={{ color: 'var(--color-ink-4)' }} />
-      </div>
-      <p className="font-medium" style={{ fontSize: 'var(--text-base)', color: 'var(--color-ink-2)' }}>{title}</p>
-      <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-3)', marginTop: 4, textAlign: 'center', maxWidth: 320 }}>{description}</p>
-    </div>
-  )
-}
-
-/* ── Recommendation badge ────────────────────────────────────────── */
-
-function RecommendationBadge({ rec, status }) {
-  if (status === 'running') {
+function SignalBadge({ review }) {
+  if (review?.status === 'running') {
     return (
-      <span
-        className="inline-flex items-center gap-2xs font-medium flex-shrink-0 font-mono"
-        style={{ background: 'var(--color-accent-bg)', color: 'var(--color-accent)', padding: '3px 8px', borderRadius: 'var(--radius-sm)', fontSize: 'var(--text-xs)' }}
-      >
-        <Loader2 className="w-3 h-3" style={{ animation: 'spin 1s linear infinite' }} />
-        Running
+      <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2xs)', padding: '0.35rem 0.65rem', borderRadius: 'var(--radius-full)', background: 'var(--color-accent-bg)', color: 'var(--color-accent)', fontSize: 'var(--text-xs)', fontWeight: 700 }}>
+        <Loader2 className="w-3 h-3" style={{ animation: 'orbit-turn 1.2s linear infinite' }} />
+        scanning
       </span>
     )
   }
 
-  if (status === 'failed') {
+  if (review?.status === 'failed') {
     return (
-      <span
-        className="inline-flex items-center font-medium flex-shrink-0 font-mono"
-        style={{ background: 'var(--color-danger-bg)', color: 'var(--color-danger)', padding: '3px 8px', borderRadius: 'var(--radius-sm)', fontSize: 'var(--text-xs)' }}
-      >
-        Failed
+      <span className="mono" style={{ padding: '0.35rem 0.65rem', borderRadius: 'var(--radius-full)', background: 'var(--color-danger-bg)', color: 'var(--color-danger)', fontSize: 'var(--text-xs)', fontWeight: 700 }}>
+        failed
       </span>
     )
   }
 
-  const config = {
-    approve: { bg: 'var(--color-success-bg)', text: 'var(--color-success)', label: 'Approve' },
-    request_changes: { bg: 'var(--color-danger-bg)', text: 'var(--color-danger)', label: 'Changes' },
-    comment: { bg: 'var(--color-warning-bg)', text: 'var(--color-warning)', label: 'Comment' },
-  }
-  const c = config[rec] || { bg: 'var(--color-paper-3)', text: 'var(--color-ink-2)', label: rec }
-
+  const tone = badgeTone[review?.recommendation] || { label: review?.recommendation || 'quiet', bg: 'var(--color-paper-3)', fg: 'var(--color-ink-3)', Icon: MessageSquare }
   return (
-    <span
-      className="inline-flex items-center font-medium flex-shrink-0 font-mono"
-      style={{ background: c.bg, color: c.text, padding: '3px 8px', borderRadius: 'var(--radius-sm)', fontSize: 'var(--text-xs)' }}
-    >
-      {c.label}
+    <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2xs)', padding: '0.35rem 0.65rem', borderRadius: 'var(--radius-full)', background: tone.bg, color: tone.fg, fontSize: 'var(--text-xs)', fontWeight: 700 }}>
+      <tone.Icon className="w-3 h-3" />
+      {tone.label}
     </span>
   )
 }
 
-/* ── Dashboard ───────────────────────────────────────────────────── */
+function Metric({ label, value, helper, icon: Icon, tone = 'var(--color-accent)' }) {
+  return (
+    <div className="panel-soft reveal" style={{ padding: 'var(--space-md)', minHeight: 130 }}>
+      <div className="flex items-start justify-between gap-md">
+        <p className="mono" style={{ color: 'var(--color-ink-4)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>{label}</p>
+        <Icon className="w-4 h-4" style={{ color: tone }} />
+      </div>
+      <p className="mono" style={{ marginTop: 'var(--space-lg)', color: 'var(--color-ink)', fontSize: 'var(--text-3xl)', fontWeight: 700, letterSpacing: '-0.06em', lineHeight: 1 }}>
+        {value}
+      </p>
+      <p style={{ marginTop: 'var(--space-xs)', color: 'var(--color-ink-3)', fontSize: 'var(--text-sm)' }}>{helper}</p>
+    </div>
+  )
+}
+
+function SeverityOrbit({ high, medium, low }) {
+  const total = Math.max(high + medium + low, 1)
+  const segments = [
+    { label: 'HIGH', value: high, color: 'var(--color-danger)' },
+    { label: 'MED', value: medium, color: 'var(--color-warning)' },
+    { label: 'LOW', value: low, color: 'var(--color-info)' },
+  ]
+
+  return (
+    <div className="panel panel-live reveal" style={{ padding: 'var(--space-lg)', display: 'grid', gap: 'var(--space-lg)' }}>
+      <div>
+        <p className="kicker">risk organism</p>
+        <h2 style={{ color: 'var(--color-ink)', fontSize: 'var(--text-xl)', fontWeight: 800, letterSpacing: '-0.04em', marginTop: 'var(--space-xs)' }}>
+          Finding metabolism
+        </h2>
+      </div>
+
+      <div style={{ display: 'grid', placeItems: 'center', minHeight: 210 }}>
+        <div className="living-orb" style={{ width: 176, height: 176 }} aria-label={`${total} findings`}>
+          <div style={{ textAlign: 'center' }}>
+            <p className="mono" style={{ color: 'var(--color-ink)', fontSize: 'var(--text-3xl)', fontWeight: 800, lineHeight: 1 }}>{high + medium + low}</p>
+            <p className="mono" style={{ color: 'var(--color-ink-3)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>findings</p>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gap: 'var(--space-sm)' }}>
+        {segments.map((s) => (
+          <div key={s.label}>
+            <div className="flex items-center justify-between">
+              <span className="mono" style={{ color: 'var(--color-ink-3)', fontSize: 'var(--text-xs)' }}>{s.label}</span>
+              <span className="mono" style={{ color: s.color, fontSize: 'var(--text-xs)', fontWeight: 700 }}>{s.value}</span>
+            </div>
+            <div style={{ height: 7, marginTop: 'var(--space-2xs)', borderRadius: 'var(--radius-full)', background: 'var(--color-paper-3)', overflow: 'hidden' }}>
+              <div style={{ width: `${Math.max((s.value / total) * 100, s.value ? 8 : 0)}%`, height: '100%', borderRadius: 'var(--radius-full)', background: s.color, transition: `width var(--dur-long) var(--ease-out)` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function PollConstellation({ states = [] }) {
+  return (
+    <div className="panel reveal" style={{ padding: 'var(--space-lg)' }}>
+      <div className="flex items-center justify-between gap-md">
+        <div>
+          <p className="kicker">polling field</p>
+          <h2 style={{ color: 'var(--color-ink)', fontSize: 'var(--text-xl)', fontWeight: 800, letterSpacing: '-0.04em', marginTop: 'var(--space-xs)' }}>
+            Repository orbit
+          </h2>
+        </div>
+        <Radar className="w-5 h-5" style={{ color: 'var(--color-accent)' }} />
+      </div>
+
+      <div style={{ display: 'grid', gap: 'var(--space-sm)', marginTop: 'var(--space-lg)' }}>
+        {states.length === 0 ? (
+          <p style={{ color: 'var(--color-ink-3)', fontSize: 'var(--text-sm)' }}>No poll states yet.</p>
+        ) : states.map((ps) => (
+          <div key={ps.repo} className="panel-soft" style={{ padding: 'var(--space-sm)' }}>
+            <div className="flex items-center justify-between gap-sm">
+              <div className="flex items-center gap-xs">
+                <span className="signal-dot" aria-hidden="true" />
+                <span className="mono" style={{ color: 'var(--color-ink)', fontWeight: 700 }}>{ps.repo}</span>
+              </div>
+              <span className="mono" style={{ color: 'var(--color-ink-4)', fontSize: 'var(--text-xs)' }}>
+                {ps.last_poll_at ? new Date(ps.last_poll_at).toLocaleString('th-TH') : 'never'}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ReviewStream({ reviews }) {
+  if (!reviews.length) {
+    return (
+      <div className="panel reveal" style={{ padding: 'var(--space-2xl)', textAlign: 'center' }}>
+        <FileSearch className="w-8 h-8 mx-auto" style={{ color: 'var(--color-ink-4)' }} />
+        <p style={{ marginTop: 'var(--space-md)', color: 'var(--color-ink)', fontWeight: 700 }}>No review signals yet</p>
+        <p style={{ marginTop: 'var(--space-2xs)', color: 'var(--color-ink-3)' }}>Submit a PR URL or wait for the next poll.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="panel reveal" style={{ overflow: 'hidden' }}>
+      <div style={{ padding: 'var(--space-lg)', borderBottom: '1px solid var(--color-rule)' }}>
+        <p className="kicker">recent signals</p>
+      </div>
+      <div>
+        {reviews.map((rv) => (
+          <Link
+            key={rv.id}
+            to={`/prs/${rv.pr_id}`}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr) auto',
+              gap: 'var(--space-md)',
+              alignItems: 'center',
+              padding: 'var(--space-md) var(--space-lg)',
+              borderBottom: '1px solid var(--color-rule)',
+              color: 'inherit',
+              textDecoration: 'none',
+              transition: `background var(--dur-short) var(--ease-out)`,
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--color-paper-3)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            <div className="min-w-0">
+              <div className="flex items-center gap-xs flex-wrap">
+                <SignalBadge review={rv} />
+                <span className="mono" style={{ color: 'var(--color-ink-4)', fontSize: 'var(--text-xs)' }}>{rv.pr_repo}</span>
+              </div>
+              <p style={{ marginTop: 'var(--space-xs)', color: 'var(--color-ink)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {rv.pr_title || `PR #${rv.pr_id}`}
+              </p>
+              <p style={{ color: 'var(--color-ink-3)', fontSize: 'var(--text-sm)', marginTop: 'var(--space-2xs)' }}>
+                {rv.pr_author || 'Unknown author'} · {rv.status === 'running' ? 'review in progress' : `${rv.duration_seconds ?? 0}s`}
+              </p>
+            </div>
+            <div className="flex items-center gap-xs">
+              {rv.high_count > 0 && <span className="mono" style={{ color: 'var(--color-danger)', background: 'var(--color-danger-bg)', padding: '0.25rem 0.45rem', borderRadius: 'var(--radius-sm)', fontSize: 'var(--text-xs)', fontWeight: 700 }}>{rv.high_count}H</span>}
+              {rv.medium_count > 0 && <span className="mono" style={{ color: 'var(--color-warning)', background: 'var(--color-warning-bg)', padding: '0.25rem 0.45rem', borderRadius: 'var(--radius-sm)', fontSize: 'var(--text-xs)', fontWeight: 700 }}>{rv.medium_count}M</span>}
+              <ArrowUpRight className="w-4 h-4" style={{ color: 'var(--color-ink-4)' }} />
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 function Dashboard() {
   const [stats, setStats] = useState(null)
@@ -212,7 +223,7 @@ function Dashboard() {
 
   const refreshDashboard = () => {
     fetch('/api/stats').then(r => r.json()).then(setStats)
-    fetch('/api/reviews?limit=10').then(r => r.json()).then(d => setRecentReviews(d.reviews || []))
+    fetch('/api/reviews?limit=8').then(r => r.json()).then(d => setRecentReviews(d.reviews || []))
   }
 
   useEffect(() => {
@@ -236,13 +247,12 @@ function Dashboard() {
         body: JSON.stringify({ url: prUrl.trim() }),
       })
       const data = await resp.json()
-      if (!resp.ok) {
-        setSubmitResult({ error: data.detail || 'Failed' })
-      } else {
+      if (!resp.ok) setSubmitResult({ error: data.detail || 'Failed to submit PR' })
+      else {
         setSubmitResult(data)
         setPrUrl('')
         refreshDashboard()
-        setTimeout(refreshDashboard, 5000)
+        setTimeout(refreshDashboard, 1500)
       }
     } catch (e) {
       setSubmitResult({ error: e.message })
@@ -251,192 +261,120 @@ function Dashboard() {
     }
   }
 
+  const systemMood = useMemo(() => {
+    const running = recentReviews.filter(rv => rv.status === 'running').length
+    const high = stats?.findings_by_severity?.HIGH || 0
+    if (running) return { label: `${running} scan${running > 1 ? 's' : ''} breathing`, tone: 'var(--color-accent)' }
+    if (high) return { label: `${high} high-risk anomaly`, tone: 'var(--color-danger)' }
+    return { label: 'habitat stable', tone: 'var(--color-success)' }
+  }, [recentReviews, stats])
+
   if (!stats) return <LoadingSkeleton />
 
-  const totalFindings = stats.total_findings || 0
-  const highCount = stats.findings_by_severity?.HIGH || 0
-  const medCount = stats.findings_by_severity?.MEDIUM || 0
-  const lowCount = stats.findings_by_severity?.LOW || 0
+  const high = stats.findings_by_severity?.HIGH || 0
+  const medium = stats.findings_by_severity?.MEDIUM || 0
+  const low = stats.findings_by_severity?.LOW || 0
 
   return (
-    <div className="p-lg space-y-lg animate-fade-in" style={{ maxWidth: 1200 }}>
-      {/* Header */}
-      <div style={{ '--i': 0 }} className="reveal">
-        <h2 className="font-semibold tracking-tight" style={{ fontSize: 'var(--text-xl)', color: 'var(--color-ink)', letterSpacing: '-0.025em' }}>
-          Dashboard
-        </h2>
-        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-3)', marginTop: 4 }}>
-          Automated PR security review overview
-        </p>
-      </div>
-
-      {/* Submit PR URL */}
-      <div className="reveal" style={{ '--i': 0.5, background: 'var(--color-paper-2)', border: '1px solid var(--color-rule)', borderRadius: 'var(--radius-card)', padding: 'var(--space-md)' }}>
-        <label style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-ink)', display: 'block', marginBottom: 'var(--space-2xs)' }}>
-          Submit PR for Review
-        </label>
-        <div style={{ display: 'flex', gap: 'var(--space-xs)' }}>
-          <input
-            type="url"
-            value={prUrl}
-            onChange={e => setPrUrl(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSubmitUrl()}
-            placeholder="https://dev.azure.com/.../pullrequest/12345"
-            style={{
-              flex: 1, padding: 'var(--space-2xs) var(--space-sm)',
-              background: 'var(--color-paper)', color: 'var(--color-ink)',
-              border: '1px solid var(--color-rule)', borderRadius: 'var(--radius-input)',
-              fontSize: 'var(--text-sm)', fontFamily: 'var(--font-mono)',
-              outline: 'none',
-            }}
-          />
-          <button
-            onClick={handleSubmitUrl}
-            disabled={submitting || !prUrl.trim()}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 'var(--space-2xs)',
-              padding: 'var(--space-2xs) var(--space-md)',
-              background: 'var(--color-accent)', color: 'var(--color-accent-ink)',
-              border: 'none', borderRadius: 'var(--radius-input)',
-              fontSize: 'var(--text-sm)', fontWeight: 600, cursor: 'pointer',
-              opacity: (submitting || !prUrl.trim()) ? 0.5 : 1,
-            }}
-          >
-            {submitting ? <Loader2 className="w-4 h-4" style={{ animation: 'spin 1s linear infinite' }} /> : <Search className="w-4 h-4" />}
-            Review
-          </button>
-        </div>
-        {submitResult && (
-          <div style={{
-            marginTop: 'var(--space-xs)', padding: 'var(--space-2xs) var(--space-sm)',
-            borderRadius: 'var(--radius-input)', fontSize: 'var(--text-sm)',
-            background: submitResult.error ? 'rgba(255,80,80,0.1)' : 'rgba(80,200,120,0.1)',
-            border: `1px solid ${submitResult.error ? 'rgba(255,80,80,0.2)' : 'rgba(80,200,120,0.2)'}`,
-            color: 'var(--color-ink)',
-          }}>
-            {submitResult.error
-              ? `❌ ${submitResult.error}`
-              : `✅ ${submitResult.message} (${submitResult.repo || 'PR'} #${submitResult.azure_pr_id || submitResult.pr_id})`
-            }
-          </div>
-        )}
-      </div>
-
-      {/* Stat Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-sm reveal" style={{ '--i': 1 }}>
-        <StatCard label="Total PRs" value={stats.total_prs} icon={GitPullRequest} accentVar="--color-info" />
-        <StatCard label="Reviews" value={stats.total_reviews} icon={FileSearch} accentVar="--color-accent" />
-        <StatCard label="Findings" value={totalFindings} icon={AlertTriangle} accentVar="--color-warning" />
-        <StatCard label="Critical" value={highCount} icon={Flame} accentVar="--color-danger" />
-      </div>
-
-      {/* Recommendation + Severity row */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-sm reveal" style={{ '--i': 2 }}>
-        <div className="md:col-span-3" style={{ ...cardStyle, padding: 'var(--space-md)' }}>
-          <h3 style={sectionLabel}>Recommendations</h3>
-          <div className="grid grid-cols-3 gap-xs" style={{ marginTop: 'var(--space-sm)' }}>
-            <RecommendationCard label="Approved" value={stats.recommendations?.approve || 0} icon={CheckCircle} accentVar="--color-success" />
-            <RecommendationCard label="Changes" value={stats.recommendations?.request_changes || 0} icon={XCircle} accentVar="--color-danger" />
-            <RecommendationCard label="Comments" value={stats.recommendations?.comment || 0} icon={MessageSquare} accentVar="--color-warning" />
+    <div className="page-frame" style={{ display: 'grid', gap: 'var(--space-lg)' }}>
+      <section className="panel panel-live reveal" style={{ '--i': 0, padding: 'var(--space-md)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 18rem), 1fr))', gap: 'var(--space-md)', alignItems: 'center' }}>
+        <div className="flex items-center gap-sm min-w-0">
+          <span className={`signal-dot ${recentReviews.some(rv => rv.status === 'running') ? 'is-running' : ''}`} aria-hidden="true" />
+          <div className="min-w-0">
+            <p className="kicker">system status</p>
+            <p className="mono" style={{ marginTop: 'var(--space-2xs)', color: systemMood.tone, fontSize: 'var(--text-lg)', fontWeight: 800, letterSpacing: '-0.02em' }}>
+              {systemMood.label}
+            </p>
+            <p className="mono" style={{ marginTop: 'var(--space-2xs)', color: 'var(--color-ink-4)', fontSize: 'var(--text-xs)' }}>
+              {stats.total_reviews || 0} reviews · {stats.total_prs || 0} PRs · {stats.total_findings || 0} findings
+            </p>
           </div>
         </div>
 
-        <div className="md:col-span-2" style={{ ...cardStyle, padding: 'var(--space-md)' }}>
-          <h3 style={sectionLabel}>Findings by Severity</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)', marginTop: 'var(--space-md)' }}>
-            <SeverityBar label="HIGH" count={highCount} total={totalFindings} accentVar="--color-danger" />
-            <SeverityBar label="MEDIUM" count={medCount} total={totalFindings} accentVar="--color-warning" />
-            <SeverityBar label="LOW" count={lowCount} total={totalFindings} accentVar="--color-info" />
+        <div className="min-w-0">
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 'var(--space-xs)' }}>
+            <input
+              type="url"
+              value={prUrl}
+              onChange={e => setPrUrl(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSubmitUrl()}
+              placeholder="Paste Azure DevOps PR URL"
+              style={{
+                minHeight: 46,
+                minWidth: 0,
+                border: '1px solid var(--color-rule)',
+                borderRadius: 'var(--radius-input)',
+                background: 'var(--color-paper)',
+                color: 'var(--color-ink)',
+                padding: '0 var(--space-md)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 'var(--text-sm)',
+              }}
+            />
+            <button
+              onClick={handleSubmitUrl}
+              disabled={submitting || !prUrl.trim()}
+              style={{
+                minHeight: 46,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 'var(--space-xs)',
+                padding: '0 var(--space-md)',
+                border: 0,
+                borderRadius: 'var(--radius-input)',
+                background: 'var(--color-accent)',
+                color: 'var(--color-accent-ink)',
+                fontWeight: 800,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {submitting ? <Loader2 className="w-4 h-4" style={{ animation: 'orbit-turn 1.2s linear infinite' }} /> : <Search className="w-4 h-4" />}
+              Review
+            </button>
           </div>
-        </div>
-      </div>
 
-      {/* Poll Status */}
-      {stats.poll_states?.length > 0 && (
-        <div className="reveal" style={{ ...cardStyle, padding: 'var(--space-md)', '--i': 3 }}>
-          <h3 style={sectionLabel}>Poll Status</h3>
-          <div style={{ marginTop: 'var(--space-sm)' }}>
-            {stats.poll_states.map(ps => (
-              <div
-                key={ps.repo}
-                className="flex items-center justify-between"
-                style={{ padding: 'var(--space-xs) 0', borderBottom: '1px solid var(--color-rule)' }}
-              >
-                <div className="flex items-center gap-2xs">
-                  <div className="rounded-full" style={{ width: 6, height: 6, background: 'var(--color-accent)' }} />
-                  <span className="font-mono" style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-2)' }}>{ps.repo}</span>
-                </div>
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-4)' }}>
-                  {ps.last_poll_at ? new Date(ps.last_poll_at).toLocaleString('th-TH') : 'Never'}
-                </span>
+          {submitResult && (
+            <div className="panel-soft" style={{ marginTop: 'var(--space-sm)', padding: 'var(--space-sm)', borderColor: submitResult.error ? 'var(--color-danger)' : 'var(--color-rule-living)' }}>
+              <p style={{ color: submitResult.error ? 'var(--color-danger)' : 'var(--color-accent)', fontSize: 'var(--text-sm)' }}>
+                {submitResult.error ? submitResult.error : `${submitResult.message} · ${submitResult.repo || 'repo'} #${submitResult.azure_pr_id || submitResult.pr_id}`}
+              </p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-md">
+        <Metric label="pull requests" value={stats.total_prs || 0} helper="known in local habitat" icon={GitPullRequest} tone="var(--color-info)" />
+        <Metric label="reviews" value={stats.total_reviews || 0} helper="completed or running" icon={FileSearch} tone="var(--color-accent)" />
+        <Metric label="findings" value={stats.total_findings || 0} helper="changed-line signals" icon={AlertTriangle} tone="var(--color-warning)" />
+        <Metric label="critical" value={high} helper="needs first attention" icon={Flame} tone="var(--color-danger)" />
+      </section>
+
+      <section className="grid grid-cols-1 xl:grid-cols-[0.82fr_1.18fr] gap-md">
+        <SeverityOrbit high={high} medium={medium} low={low} />
+        <ReviewStream reviews={recentReviews} />
+      </section>
+
+      <section className="grid grid-cols-1 lg:grid-cols-[1fr_1.2fr] gap-md">
+        <PollConstellation states={stats.poll_states || []} />
+        <div className="panel reveal" style={{ padding: 'var(--space-lg)' }}>
+          <p className="kicker">recommendation ecology</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-sm" style={{ marginTop: 'var(--space-lg)' }}>
+            {[
+              { label: 'clear', value: stats.recommendations?.approve || 0, Icon: ShieldCheck, color: 'var(--color-success)' },
+              { label: 'mutate', value: stats.recommendations?.request_changes || 0, Icon: XCircle, color: 'var(--color-danger)' },
+              { label: 'observe', value: stats.recommendations?.comment || 0, Icon: MessageSquare, color: 'var(--color-warning)' },
+            ].map(({ label, value, Icon, color }) => (
+              <div key={label} className="panel-soft" style={{ padding: 'var(--space-md)' }}>
+                <Icon className="w-5 h-5" style={{ color }} />
+                <p className="mono" style={{ color: 'var(--color-ink)', fontSize: 'var(--text-2xl)', fontWeight: 800, marginTop: 'var(--space-md)', lineHeight: 1 }}>{value}</p>
+                <p className="mono" style={{ color: 'var(--color-ink-3)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.12em', marginTop: 'var(--space-xs)' }}>{label}</p>
               </div>
             ))}
           </div>
         </div>
-      )}
-
-      {/* Recent Reviews */}
-      <div className="reveal" style={{ ...cardStyle, overflow: 'hidden', '--i': 4 }}>
-        <div className="px-md py-sm border-b" style={{ borderColor: 'var(--color-rule)' }}>
-          <h3 style={sectionLabel}>Recent Reviews</h3>
-        </div>
-        {recentReviews.length === 0 ? (
-          <EmptyState icon={FileSearch} title="No reviews yet" description="Reviews will appear here once PRs are scanned by the security scanner." />
-        ) : (
-          <div>
-            {recentReviews.map((rv) => (
-              <Link
-                key={rv.id}
-                to={`/prs/${rv.pr_id}`}
-                className="flex items-center justify-between group"
-                style={{
-                  padding: 'var(--space-xs) var(--space-md)',
-                  borderBottom: '1px solid var(--color-rule)',
-                  textDecoration: 'none',
-                  transition: `background var(--dur-micro) var(--ease-out)`,
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = 'var(--color-paper-3)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-              >
-                <div className="flex items-center gap-sm min-w-0">
-                  <RecommendationBadge rec={rv.recommendation} status={rv.status} />
-                  <div className="min-w-0">
-                    <p className="font-medium truncate" style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink)', maxWidth: 400 }}>
-                      {rv.pr_title || `PR #${rv.pr_id}`}
-                    </p>
-                    <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-4)', marginTop: 2 }}>
-                      {rv.pr_repo} · {rv.pr_author || 'Unknown author'}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-sm flex-shrink-0" style={{ marginLeft: 'var(--space-md)' }}>
-                  <div className="flex items-center gap-2xs">
-                    {rv.high_count > 0 && (
-                      <span className="font-mono font-medium" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-danger)', background: 'var(--color-danger-bg)', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
-                        {rv.high_count}H
-                      </span>
-                    )}
-                    {rv.medium_count > 0 && (
-                      <span className="font-mono font-medium" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-warning)', background: 'var(--color-warning-bg)', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
-                        {rv.medium_count}M
-                      </span>
-                    )}
-                    {rv.low_count > 0 && (
-                      <span className="font-mono font-medium" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-info)', background: 'var(--color-info-bg)', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
-                        {rv.low_count}L
-                      </span>
-                    )}
-                  </div>
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-4)' }}>
-                    {rv.status === 'running' ? 'running' : `${rv.duration_seconds ?? 0}s`}
-                  </span>
-                  <ArrowUpRight className="w-3.5 h-3.5" style={{ color: 'var(--color-ink-4)', transition: `color var(--dur-micro) var(--ease-out)` }} />
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
-      </div>
+      </section>
     </div>
   )
 }

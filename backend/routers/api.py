@@ -727,6 +727,7 @@ async def comment_selected_findings(
             description=finding.description,
             code_snippet=finding.code_snippet,
             fix_suggestion=finding.fix_suggestion,
+            file_path=finding.file_path,
         )
 
         # Post

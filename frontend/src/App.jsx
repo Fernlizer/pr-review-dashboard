@@ -1,141 +1,149 @@
-import { Routes, Route, NavLink } from 'react-router-dom'
-import { Shield, GitPullRequest, LayoutDashboard, Settings as SettingsIcon, RefreshCw } from 'lucide-react'
+import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
+import { useState } from 'react'
+import { Activity, GitPullRequest, LayoutDashboard, RefreshCw, Settings as SettingsIcon, Shield } from 'lucide-react'
 import Dashboard from './pages/Dashboard'
 import PRList from './pages/PRList'
 import PRDetail from './pages/PRDetail'
 import SettingsPage from './pages/Settings'
-import { useState } from 'react'
+
+const navItems = [
+  { to: '/', icon: LayoutDashboard, label: 'Overview', code: '01' },
+  { to: '/prs', icon: GitPullRequest, label: 'Signals', code: '02' },
+  { to: '/settings', icon: SettingsIcon, label: 'Controls', code: '03' },
+]
 
 function App() {
   const [polling, setPolling] = useState(false)
+  const [lastPulse, setLastPulse] = useState(null)
+  const location = useLocation()
 
   const triggerPoll = async () => {
     setPolling(true)
     try {
       await fetch('/api/poll', { method: 'POST' })
-      // Backend returns immediately — poll runs in background
-      // Auto-reload after 5 seconds to show updated results
-      setTimeout(() => {
-        window.location.reload()
-      }, 5000)
+      setLastPulse(new Date())
+      setTimeout(() => setPolling(false), 5000)
     } catch (e) {
       console.error(e)
       setPolling(false)
     }
   }
 
-  const navItems = [
-    { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-    { to: '/prs', icon: GitPullRequest, label: 'Pull Requests' },
-    { to: '/settings', icon: SettingsIcon, label: 'Settings' },
-  ]
-
   return (
-    <div className="flex min-h-screen">
-      {/* Sidebar */}
-      <aside
-        className="w-[240px] flex-shrink-0 flex flex-col border-r"
-        style={{
-          background: 'var(--color-paper-2)',
-          borderColor: 'var(--color-rule)',
-        }}
-      >
-        {/* Wordmark */}
-        <div
-          className="px-md py-lg border-b"
-          style={{ borderColor: 'var(--color-rule)' }}
-        >
-          <div className="flex items-center gap-sm">
-            <div
-              className="w-8 h-8 rounded-md flex items-center justify-center"
-              style={{ background: 'var(--color-accent-bg)' }}
-            >
-              <Shield
-                className="w-4 h-4"
-                style={{ color: 'var(--color-accent)' }}
-              />
+    <div className="app-shell">
+      <aside className="orbit-rail">
+        <div className="flex h-full flex-col">
+          <div>
+            <div className="flex items-center gap-sm">
+              <div className="living-orb" style={{ width: 44, height: 44 }} aria-hidden="true">
+                <Shield className="w-5 h-5" style={{ color: 'var(--color-accent-ink)' }} />
+              </div>
+              <div>
+                <p className="kicker">private orbit</p>
+                <h1 style={{ color: 'var(--color-ink)', fontSize: 'var(--text-lg)', fontWeight: 800, letterSpacing: '-0.05em' }}>
+                  Review Habitat
+                </h1>
+              </div>
             </div>
-            <div>
-              <h1
-                className="text-sm font-semibold tracking-tight"
-                style={{ color: 'var(--color-ink)', letterSpacing: '-0.02em' }}
+
+            <p style={{ marginTop: 'var(--space-lg)', color: 'var(--color-ink-3)', fontSize: 'var(--text-sm)', lineHeight: 1.7 }}>
+              A living command room for Azure PR review, security signals, and inline comment operations.
+            </p>
+          </div>
+
+          <nav style={{ display: 'grid', gap: 'var(--space-xs)', marginTop: 'var(--space-2xl)' }} aria-label="Primary">
+            {navItems.map(({ to, icon: Icon, label, code }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === '/'}
+                style={({ isActive }) => ({
+                  display: 'grid',
+                  gridTemplateColumns: '2.25rem minmax(0, 1fr) auto',
+                  alignItems: 'center',
+                  gap: 'var(--space-xs)',
+                  minHeight: 48,
+                  padding: 'var(--space-xs)',
+                  borderRadius: 'var(--radius-lg)',
+                  border: `1px solid ${isActive ? 'var(--color-rule-living)' : 'transparent'}`,
+                  background: isActive ? 'var(--color-accent-bg)' : 'transparent',
+                  color: isActive ? 'var(--color-ink)' : 'var(--color-ink-3)',
+                  textDecoration: 'none',
+                  transition: `background var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out)`,
+                })}
               >
-                PR Review
-              </h1>
-              <p
-                className="text-xs font-mono"
-                style={{ color: 'var(--color-ink-3)' }}
-              >
-                security scanner
+                {({ isActive }) => (
+                  <>
+                    <span
+                      className="mono"
+                      style={{
+                        display: 'grid',
+                        placeItems: 'center',
+                        width: 34,
+                        height: 34,
+                        borderRadius: 'var(--radius-md)',
+                        background: isActive ? 'var(--color-accent)' : 'var(--color-paper-3)',
+                        color: isActive ? 'var(--color-accent-ink)' : 'var(--color-ink-4)',
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {code}
+                    </span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                      <Icon className="w-4 h-4" style={{ color: isActive ? 'var(--color-accent)' : 'var(--color-ink-4)' }} />
+                      {label}
+                    </span>
+                    {isActive && <span className="signal-dot" aria-hidden="true" />}
+                  </>
+                )}
+              </NavLink>
+            ))}
+          </nav>
+
+          <div style={{ marginTop: 'auto' }}>
+            <div className="panel-soft" style={{ padding: 'var(--space-md)', marginBottom: 'var(--space-sm)' }}>
+              <div className="flex items-center justify-between gap-sm">
+                <div className="flex items-center gap-xs">
+                  <Activity className="w-4 h-4" style={{ color: polling ? 'var(--color-accent)' : 'var(--color-ink-4)' }} />
+                  <span className="mono" style={{ color: 'var(--color-ink-3)', fontSize: 'var(--text-xs)' }}>
+                    {polling ? 'polling now' : 'orbit idle'}
+                  </span>
+                </div>
+                <span className={`signal-dot ${polling ? 'is-running' : ''}`} aria-hidden="true" />
+              </div>
+              <p className="mono" style={{ marginTop: 'var(--space-xs)', color: 'var(--color-ink-4)', fontSize: 'var(--text-xs)' }}>
+                {lastPulse ? lastPulse.toLocaleTimeString('th-TH') : location.pathname === '/' ? 'ready' : 'standing by'}
               </p>
             </div>
-          </div>
-        </div>
 
-        {/* Nav */}
-        <nav className="flex-1 px-sm py-sm" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          {navItems.map(({ to, icon: Icon, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === '/'}
-              className={({ isActive }) =>
-                `group flex items-center gap-sm px-sm py-[7px] rounded-md text-sm font-medium transition-colors`
-              }
-              style={({ isActive }) => ({
-                background: isActive ? 'var(--color-paper-3)' : 'transparent',
-                color: isActive ? 'var(--color-ink)' : 'var(--color-ink-3)',
-                transitionDuration: 'var(--dur-micro)',
-              })}
+            <button
+              onClick={triggerPoll}
+              disabled={polling}
+              style={{
+                width: '100%',
+                minHeight: 48,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 'var(--space-xs)',
+                border: '1px solid var(--color-rule-living)',
+                borderRadius: 'var(--radius-lg)',
+                background: polling ? 'var(--color-accent-bg)' : 'var(--color-accent)',
+                color: polling ? 'var(--color-accent)' : 'var(--color-accent-ink)',
+                fontWeight: 800,
+                whiteSpace: 'nowrap',
+                transition: `background var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out)`,
+              }}
             >
-              {({ isActive }) => (
-                <>
-                  <Icon
-                    className="w-4 h-4 flex-shrink-0"
-                    style={{
-                      color: isActive ? 'var(--color-accent)' : 'var(--color-ink-4)',
-                      transition: `color var(--dur-micro) var(--ease-out)`,
-                    }}
-                  />
-                  {label}
-                  {isActive && (
-                    <div
-                      className="ml-auto w-1.5 h-1.5 rounded-full"
-                      style={{ background: 'var(--color-accent)' }}
-                    />
-                  )}
-                </>
-              )}
-            </NavLink>
-          ))}
-        </nav>
-
-        {/* Poll button */}
-        <div className="p-sm border-t" style={{ borderColor: 'var(--color-rule)' }}>
-          <button
-            onClick={triggerPoll}
-            disabled={polling}
-            className="w-full flex items-center justify-center gap-2xs rounded-md text-sm font-semibold transition-all"
-            style={{
-              background: polling ? 'var(--color-accent-2)' : 'var(--color-accent)',
-              color: 'var(--color-accent-ink)',
-              padding: '10px 16px',
-              opacity: polling ? 0.7 : 1,
-              cursor: polling ? 'not-allowed' : 'pointer',
-              transitionDuration: 'var(--dur-short)',
-            }}
-          >
-            <RefreshCw
-              className="w-3.5 h-3.5"
-              style={polling ? { animation: 'spin 1s linear infinite' } : {}}
-            />
-            {polling ? 'Polling...' : 'Poll Now'}
-          </button>
+              <RefreshCw className="w-4 h-4" style={polling ? { animation: 'orbit-turn 1.2s linear infinite' } : {}} />
+              {polling ? 'Polling' : 'Poll now'}
+            </button>
+          </div>
         </div>
       </aside>
 
-      {/* Main content */}
-      <main className="flex-1 overflow-auto min-w-0">
+      <main className="orbit-main">
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/prs" element={<PRList />} />

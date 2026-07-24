@@ -1,140 +1,42 @@
-/* Hallmark · genre: atmospheric · macrostructure: Workbench · design-system: design.md · designed-as-app */
+/* Hallmark · pre-emit critique: P4 H5 E4 S5 R4 V5 */
+/* Hallmark · genre: atmospheric · macrostructure: Signal Feed · theme: custom Night Garden */
 
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowUpRight, Filter, Loader2, Search } from 'lucide-react'
-
-/* ── Loading skeleton ────────────────────────────────────────────── */
+import { ArrowUpRight, Filter, GitPullRequest, Loader2, Search } from 'lucide-react'
 
 function LoadingSkeleton() {
   return (
-    <div className="p-lg space-y-md animate-fade-in">
-      <div className="space-y-2xs">
-        <div className="skeleton" style={{ height: 28, width: 180 }} />
-        <div className="skeleton" style={{ height: 16, width: 120 }} />
-      </div>
-      <div className="space-y-xs" style={{ marginTop: 'var(--space-lg)' }}>
-        {[...Array(5)].map((_, i) => (
-          <div
-            key={i}
-            style={{
-              background: 'var(--color-paper-2)',
-              border: '1px solid var(--color-rule)',
-              borderRadius: 'var(--radius-lg)',
-              padding: 'var(--space-md)',
-            }}
-          >
-            <div className="flex items-start justify-between">
-              <div className="space-y-2xs flex-1">
-                <div className="flex gap-2xs">
-                  <div className="skeleton" style={{ height: 20, width: 72 }} />
-                  <div className="skeleton" style={{ height: 20, width: 40 }} />
-                </div>
-                <div className="skeleton" style={{ height: 18, width: '75%' }} />
-                <div className="flex gap-sm mt-xs">
-                  <div className="skeleton" style={{ height: 14, width: 80 }} />
-                  <div className="skeleton" style={{ height: 14, width: 160 }} />
-                </div>
-              </div>
-              <div className="skeleton" style={{ height: 28, width: 72 }} />
-            </div>
-          </div>
-        ))}
-      </div>
+    <div className="page-frame" style={{ display: 'grid', gap: 'var(--space-md)' }}>
+      <div className="skeleton" style={{ height: 160 }} />
+      {[...Array(5)].map((_, i) => <div key={i} className="skeleton" style={{ height: 98 }} />)}
     </div>
   )
 }
 
-/* ── Status badge ────────────────────────────────────────────────── */
-
-function StatusBadge({ status }) {
-  const config = {
-    active: { bg: 'var(--color-success-bg)', text: 'var(--color-success)', dot: 'var(--color-success)' },
-    completed: { bg: 'var(--color-paper-3)', text: 'var(--color-ink-3)', dot: 'var(--color-ink-4)' },
-    abandoned: { bg: 'var(--color-paper-3)', text: 'var(--color-ink-4)', dot: 'var(--color-ink-4)' },
-  }
-  const c = config[status] || config.active
-
-  return (
-    <span
-      className="inline-flex items-center font-mono"
-      style={{
-        gap: 6,
-        fontSize: 'var(--text-xs)',
-        padding: '3px 8px',
-        borderRadius: 'var(--radius-sm)',
-        background: c.bg,
-        color: c.text,
-      }}
-    >
-      <span className="rounded-full flex-shrink-0" style={{ width: 5, height: 5, background: c.dot }} />
-      {status}
-    </span>
-  )
-}
-
-/* ── Review badge ────────────────────────────────────────────────── */
-
 function ReviewBadge({ review }) {
+  if (!review) {
+    return <span className="mono" style={{ color: 'var(--color-ink-4)', fontSize: 'var(--text-xs)' }}>unscanned</span>
+  }
   if (review.status === 'running') {
     return (
-      <span
-        className="inline-flex items-center gap-2xs font-medium font-mono"
-        style={{
-          fontSize: 'var(--text-xs)',
-          padding: '4px 10px',
-          borderRadius: 'var(--radius-sm)',
-          background: 'var(--color-accent-bg)',
-          color: 'var(--color-accent)',
-        }}
-      >
-        <Loader2 className="w-3 h-3" style={{ animation: 'spin 1s linear infinite' }} />
-        Running
+      <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2xs)', color: 'var(--color-accent)', background: 'var(--color-accent-bg)', borderRadius: 'var(--radius-full)', padding: '0.35rem 0.65rem', fontSize: 'var(--text-xs)', fontWeight: 800 }}>
+        <Loader2 className="w-3 h-3" style={{ animation: 'orbit-turn 1.2s linear infinite' }} />
+        scanning
       </span>
     )
   }
-
   if (review.status === 'failed') {
-    return (
-      <span
-        className="font-medium font-mono"
-        style={{
-          fontSize: 'var(--text-xs)',
-          padding: '4px 10px',
-          borderRadius: 'var(--radius-sm)',
-          background: 'var(--color-danger-bg)',
-          color: 'var(--color-danger)',
-        }}
-      >
-        Failed
-      </span>
-    )
+    return <span className="mono" style={{ color: 'var(--color-danger)', background: 'var(--color-danger-bg)', borderRadius: 'var(--radius-full)', padding: '0.35rem 0.65rem', fontSize: 'var(--text-xs)', fontWeight: 800 }}>failed</span>
   }
-
-  const config = {
-    approve: { bg: 'var(--color-success-bg)', text: 'var(--color-success)', label: 'Approved' },
-    request_changes: { bg: 'var(--color-danger-bg)', text: 'var(--color-danger)', label: 'Changes' },
-    comment: { bg: 'var(--color-warning-bg)', text: 'var(--color-warning)', label: 'Comment' },
+  const map = {
+    approve: ['clear', 'var(--color-success)', 'var(--color-success-bg)'],
+    request_changes: ['mutate', 'var(--color-danger)', 'var(--color-danger-bg)'],
+    comment: ['observe', 'var(--color-warning)', 'var(--color-warning-bg)'],
   }
-  const c = config[review.recommendation] || { bg: 'var(--color-paper-3)', text: 'var(--color-ink-2)', label: review.recommendation }
-
-  return (
-    <span
-      className="font-medium font-mono"
-      style={{
-        fontSize: 'var(--text-xs)',
-        padding: '4px 10px',
-        borderRadius: 'var(--radius-sm)',
-        background: c.bg,
-        color: c.text,
-      }}
-    >
-      {c.label}
-    </span>
-  )
+  const [label, fg, bg] = map[review.recommendation] || [review.recommendation || 'reviewed', 'var(--color-ink-3)', 'var(--color-paper-3)']
+  return <span className="mono" style={{ color: fg, background: bg, borderRadius: 'var(--radius-full)', padding: '0.35rem 0.65rem', fontSize: 'var(--text-xs)', fontWeight: 800 }}>{label}</span>
 }
-
-/* ── PR List ─────────────────────────────────────────────────────── */
 
 function PRList() {
   const [prs, setPrs] = useState([])
@@ -164,200 +66,117 @@ function PRList() {
     return () => clearInterval(timer)
   }, [prs, repo, status])
 
-  const repos = ['', 'purchase', 'usermgt', 'coop']
+  const activeCount = useMemo(() => prs.filter(pr => pr.status === 'active').length, [prs])
+  const runningCount = useMemo(() => prs.filter(pr => pr.latest_review?.status === 'running').length, [prs])
 
-  const selectStyle = {
-    background: 'var(--color-paper-2)',
-    border: '1px solid var(--color-rule)',
-    color: 'var(--color-ink-2)',
-    fontSize: 'var(--text-sm)',
-    borderRadius: 'var(--radius-md)',
-    padding: '6px 12px',
-    outline: 'none',
-    cursor: 'pointer',
-    appearance: 'none',
-    fontFamily: 'var(--font-body)',
-  }
+  if (loading) return <LoadingSkeleton />
 
   return (
-    <div className="p-lg space-y-md animate-fade-in" style={{ maxWidth: 1200 }}>
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-sm">
-        <div>
-          <h2 className="font-semibold tracking-tight" style={{ fontSize: 'var(--text-xl)', color: 'var(--color-ink)', letterSpacing: '-0.025em' }}>
-            Pull Requests
-          </h2>
-          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-3)', marginTop: 4 }}>
-            {total} PR{total !== 1 ? 's' : ''} tracked
-          </p>
-        </div>
-
-        {/* Filters */}
-        <div className="flex items-center gap-2xs">
-          <Filter className="w-4 h-4" style={{ color: 'var(--color-ink-4)' }} />
-          <select
-            value={repo}
-            onChange={e => setRepo(e.target.value)}
-            style={selectStyle}
-          >
-            <option value="">All Repos</option>
-            {repos.filter(Boolean).map(r => <option key={r} value={r}>{r}</option>)}
-          </select>
-          <select
-            value={status}
-            onChange={e => setStatus(e.target.value)}
-            style={selectStyle}
-          >
-            <option value="">All Status</option>
-            <option value="active">Active</option>
-            <option value="completed">Completed</option>
-            <option value="abandoned">Abandoned</option>
-          </select>
-        </div>
-      </div>
-
-      {/* PR List */}
-      {loading ? (
-        <LoadingSkeleton />
-      ) : prs.length === 0 ? (
-        <div
-          style={{
-            background: 'var(--color-paper-2)',
-            border: '1px solid var(--color-rule)',
-            borderRadius: 'var(--radius-lg)',
-          }}
-        >
-          <div className="flex flex-col items-center justify-center" style={{ padding: 'var(--space-3xl) var(--space-lg)' }}>
-            <div
-              className="rounded-lg flex items-center justify-center"
-              style={{ width: 48, height: 48, background: 'var(--color-paper-3)', marginBottom: 'var(--space-md)' }}
-            >
-              <Search className="w-5 h-5" style={{ color: 'var(--color-ink-4)' }} />
-            </div>
-            <p className="font-medium" style={{ fontSize: 'var(--text-base)', color: 'var(--color-ink-2)' }}>
-              No pull requests found
-            </p>
-            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-3)', marginTop: 4, textAlign: 'center', maxWidth: 320 }}>
-              {repo || status
-                ? 'Try adjusting your filters to see more results.'
-                : 'PRs will appear here once the scanner discovers them.'}
+    <div className="page-frame" style={{ display: 'grid', gap: 'var(--space-lg)' }}>
+      <section className="panel panel-live reveal" style={{ padding: 'var(--space-xl)' }}>
+        <div className="flex items-start justify-between gap-lg flex-wrap">
+          <div>
+            <p className="kicker">signal feed</p>
+            <h1 className="display-title" style={{ marginTop: 'var(--space-sm)' }}>
+              Pull requests as living signals.
+            </h1>
+            <p style={{ maxWidth: '62ch', marginTop: 'var(--space-md)', color: 'var(--color-ink-2)', fontSize: 'var(--text-md)', lineHeight: 1.75 }}>
+              Filter the orbit, watch active scans breathe, and jump into the PR detail chamber when a signal needs attention.
             </p>
           </div>
+          <div className="panel-soft" style={{ padding: 'var(--space-md)', minWidth: 220 }}>
+            <p className="mono" style={{ color: 'var(--color-ink-4)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>visible field</p>
+            <p className="mono" style={{ color: 'var(--color-ink)', fontSize: 'var(--text-3xl)', fontWeight: 800, lineHeight: 1, marginTop: 'var(--space-md)' }}>{total}</p>
+            <p style={{ color: 'var(--color-ink-3)', marginTop: 'var(--space-xs)' }}>{activeCount} active · {runningCount} scanning</p>
+          </div>
         </div>
-      ) : (
-        <div className="space-y-2xs">
-          {prs.map((pr) => (
-            <Link
-              key={pr.id}
-              to={`/prs/${pr.id}`}
-              className="block group"
-              style={{
-                background: 'var(--color-paper-2)',
-                border: '1px solid var(--color-rule)',
-                borderRadius: 'var(--radius-lg)',
-                padding: 'var(--space-sm) var(--space-md)',
-                textDecoration: 'none',
-                transition: `border-color var(--dur-micro) var(--ease-out), background var(--dur-micro) var(--ease-out)`,
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.borderColor = 'var(--color-paper-4)'
-                e.currentTarget.style.background = 'var(--color-paper-3)'
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.borderColor = 'var(--color-rule)'
-                e.currentTarget.style.background = 'var(--color-paper-2)'
-              }}
-            >
-              <div className="flex items-start justify-between gap-md">
-                <div className="flex-1 min-w-0">
-                  {/* Tags row */}
-                  <div className="flex items-center gap-2xs" style={{ marginBottom: 8 }}>
-                    <span
-                      className="font-mono"
-                      style={{
-                        fontSize: 'var(--text-xs)',
-                        padding: '2px 8px',
-                        borderRadius: 'var(--radius-sm)',
-                        background: 'var(--color-paper-3)',
-                        color: 'var(--color-ink-3)',
-                        border: '1px solid var(--color-rule)',
-                      }}
-                    >
-                      {pr.repo}
-                    </span>
-                    <span className="font-mono" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-4)' }}>
-                      #{pr.azure_pr_id}
-                    </span>
-                    {pr.is_reviewer_required === 'yes' && (
-                      <span
-                        className="font-medium"
-                        style={{ fontSize: 'var(--text-xs)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--color-danger-bg)', color: 'var(--color-danger)' }}
-                      >
-                        Required Reviewer
-                      </span>
-                    )}
-                    <StatusBadge status={pr.status} />
-                  </div>
+      </section>
 
-                  {/* Title */}
-                  <h3 className="font-medium truncate leading-snug" style={{ fontSize: 'var(--text-base)', color: 'var(--color-ink)' }}>
-                    {pr.title}
-                  </h3>
+      <section className="panel reveal" style={{ padding: 'var(--space-md)' }}>
+        <div className="flex items-center gap-md flex-wrap">
+          <div className="flex items-center gap-xs" style={{ color: 'var(--color-ink-3)' }}>
+            <Filter className="w-4 h-4" />
+            <span className="mono" style={{ fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>controls</span>
+          </div>
+          <select value={repo} onChange={e => setRepo(e.target.value)} style={selectStyle}>
+            <option value="">all repositories</option>
+            <option value="purchase">purchase</option>
+            <option value="usermgt">usermgt</option>
+            <option value="coop">coop</option>
+          </select>
+          <select value={status} onChange={e => setStatus(e.target.value)} style={selectStyle}>
+            <option value="">all states</option>
+            <option value="active">active</option>
+            <option value="completed">completed</option>
+            <option value="abandoned">abandoned</option>
+          </select>
+        </div>
+      </section>
 
-                  {/* Meta */}
-                  <div className="flex items-center gap-sm flex-wrap" style={{ marginTop: 8, fontSize: 'var(--text-xs)', color: 'var(--color-ink-4)' }}>
-                    <span>{pr.author}</span>
-                    <span style={{ color: 'var(--color-ink-4)' }}>·</span>
-                    <span className="font-mono" style={{ color: 'var(--color-ink-3)' }}>
-                      {pr.source_branch} → {pr.target_branch}
-                    </span>
-                    {pr.discovered_at && (
-                      <>
-                        <span style={{ color: 'var(--color-ink-4)' }}>·</span>
-                        <span>{new Date(pr.discovered_at).toLocaleString('th-TH')}</span>
-                      </>
-                    )}
-                  </div>
-                </div>
+      <section style={{ display: 'grid', gap: 'var(--space-sm)' }}>
+        {prs.length === 0 ? (
+          <div className="panel" style={{ padding: 'var(--space-3xl)', textAlign: 'center' }}>
+            <Search className="w-8 h-8 mx-auto" style={{ color: 'var(--color-ink-4)' }} />
+            <p style={{ marginTop: 'var(--space-md)', color: 'var(--color-ink)', fontWeight: 800 }}>No signals in this orbit</p>
+            <p style={{ color: 'var(--color-ink-3)', marginTop: 'var(--space-2xs)' }}>Try another repository or PR state.</p>
+          </div>
+        ) : prs.map((pr, index) => (
+          <Link
+            key={pr.id}
+            to={`/prs/${pr.id}`}
+            className={`panel ${pr.latest_review?.status === 'running' ? 'panel-live' : ''} reveal`}
+            style={{
+              '--i': index % 8,
+              display: 'grid',
+              gridTemplateColumns: 'auto minmax(0, 1fr) auto',
+              gap: 'var(--space-md)',
+              alignItems: 'center',
+              padding: 'var(--space-md)',
+              color: 'inherit',
+              textDecoration: 'none',
+              transition: `border-color var(--dur-short) var(--ease-out), transform var(--dur-short) var(--ease-out)`,
+            }}
+          >
+            <div className="living-orb" style={{ width: 58, height: 58 }}>
+              <GitPullRequest className="w-5 h-5" style={{ color: 'var(--color-accent-ink)' }} />
+            </div>
 
-                {/* Right side */}
-                <div className="flex items-center gap-sm flex-shrink-0">
-                  {pr.latest_review && <ReviewBadge review={pr.latest_review} />}
-                  <a
-                    href={pr.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={e => e.stopPropagation()}
-                    className="flex items-center justify-center"
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 'var(--radius-md)',
-                      border: '1px solid var(--color-rule)',
-                      color: 'var(--color-ink-4)',
-                      transition: `all var(--dur-micro) var(--ease-out)`,
-                      opacity: 0,
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.color = 'var(--color-accent)'
-                      e.currentTarget.style.borderColor = 'var(--color-accent)'
-                      e.currentTarget.style.opacity = '1'
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.color = 'var(--color-ink-4)'
-                      e.currentTarget.style.borderColor = 'var(--color-rule)'
-                    }}
-                  >
-                    <ArrowUpRight className="w-3.5 h-3.5" />
-                  </a>
-                </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-xs flex-wrap">
+                <span className="mono" style={{ color: 'var(--color-info)', fontSize: 'var(--text-xs)', fontWeight: 800 }}>{pr.repo}</span>
+                <span className="mono" style={{ color: 'var(--color-ink-4)', fontSize: 'var(--text-xs)' }}>#{pr.azure_pr_id}</span>
+                <ReviewBadge review={pr.latest_review} />
+                {pr.is_reviewer_required === 'yes' && <span className="mono" style={{ color: 'var(--color-danger)', background: 'var(--color-danger-bg)', borderRadius: 'var(--radius-full)', padding: '0.35rem 0.65rem', fontSize: 'var(--text-xs)', fontWeight: 800 }}>required</span>}
               </div>
-            </Link>
-          ))}
-        </div>
-      )}
+              <h2 style={{ marginTop: 'var(--space-xs)', color: 'var(--color-ink)', fontSize: 'var(--text-lg)', fontWeight: 800, letterSpacing: '-0.04em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {pr.title}
+              </h2>
+              <p style={{ marginTop: 'var(--space-2xs)', color: 'var(--color-ink-3)', fontSize: 'var(--text-sm)' }}>
+                {pr.author || 'Unknown author'} · {pr.source_branch} → {pr.target_branch}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-xs">
+              <span className={`signal-dot ${pr.latest_review?.status === 'running' ? 'is-running' : ''}`} aria-hidden="true" />
+              <ArrowUpRight className="w-4 h-4" style={{ color: 'var(--color-ink-4)' }} />
+            </div>
+          </Link>
+        ))}
+      </section>
     </div>
   )
+}
+
+const selectStyle = {
+  minHeight: 44,
+  minWidth: 160,
+  border: '1px solid var(--color-rule)',
+  borderRadius: 'var(--radius-input)',
+  background: 'var(--color-paper-2)',
+  color: 'var(--color-ink)',
+  padding: '0 var(--space-md)',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 'var(--text-sm)',
 }
 
 export default PRList

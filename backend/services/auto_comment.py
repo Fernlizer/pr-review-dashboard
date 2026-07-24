@@ -7,6 +7,7 @@ https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-request-threads
 import base64
 import json
 import logging
+import re
 from typing import List, Dict, Any, Optional, Set
 
 import httpx
@@ -17,6 +18,27 @@ logger = logging.getLogger(__name__)
 # Hidden dedup marker (invisible zero-width space sequence)
 # Used internally to identify our comments without showing anything to users
 _DEDUP_ID = "\u200b\u200b\u200b"  # triple zero-width space
+
+_LANG_BY_EXTENSION = {
+    ".ts": "typescript",
+    ".tsx": "tsx",
+    ".js": "javascript",
+    ".jsx": "jsx",
+    ".py": "python",
+    ".java": "java",
+    ".kt": "kotlin",
+    ".go": "go",
+    ".cs": "csharp",
+    ".sql": "sql",
+    ".json": "json",
+    ".yaml": "yaml",
+    ".yml": "yaml",
+    ".xml": "xml",
+    ".html": "html",
+    ".css": "css",
+    ".scss": "scss",
+    ".sh": "bash",
+}
 
 
 class AzureDevOpsCommentClient:
@@ -258,6 +280,85 @@ def format_summary_comment(
 {_DEDUP_ID}"""
 
 
+def _infer_markdown_language(file_path: Optional[str]) -> str:
+    """Infer a Markdown fence language from a repository file path."""
+    if not file_path:
+        return ""
+
+    path = file_path.lower()
+    for ext, language in _LANG_BY_EXTENSION.items():
+        if path.endswith(ext):
+            return language
+    return ""
+
+
+def _clean_comment_text(value: Optional[str]) -> str:
+    """Normalize LLM-provided text before embedding it in Azure DevOps Markdown."""
+    if not value:
+        return ""
+    return str(value).replace("\r\n", "\n").replace("\r", "\n").strip()
+
+
+def _strip_outer_code_fence(value: str) -> str:
+    """Remove one surrounding Markdown code fence when the whole value is fenced."""
+    match = re.fullmatch(r"\s*```[a-zA-Z0-9_-]*\n(?P<code>.*?)\n```\s*", value, re.DOTALL)
+    if match:
+        return match.group("code").strip("\n")
+    return value
+
+
+def _fenced_code_block(code: str, language: str = "") -> str:
+    code = _strip_outer_code_fence(_clean_comment_text(code))
+    fence = f"```{language}" if language else "```"
+    return f"{fence}\n{code}\n```"
+
+
+def _looks_like_code_line(line: str) -> bool:
+    stripped = line.strip()
+    if not stripped:
+        return False
+    if stripped.startswith(("@", "//", "/*", "*", "*/", "{", "}", ")", "];", "});")):
+        return True
+    if re.match(
+        r"^(async\s+)?(function|return|if|else|for|while|switch|try|catch|throw|const|let|var|class|interface|type|import|export|await|public|private|protected)\b",
+        stripped,
+    ):
+        return True
+    if re.match(r"^(async\s+)?[A-Za-z_$][\w$]*\s*\([^)]*$", stripped):
+        return True
+    return bool(re.search(r"[{};=]$", stripped) or re.search(r"\w+\([^)]*\)\s*[,{;]?$", stripped))
+
+
+def _split_fix_suggestion(value: str) -> tuple[str, str]:
+    """Split LLM fix text into human prose and code when it contains multiline code."""
+    text = _clean_comment_text(value)
+    text = re.sub(r"^(?:💡\s*)?(?:\*\*)?fix(?:\s*suggestion)?(?:\*\*)?\s*[:：-]\s*", "", text, flags=re.I)
+    if not text:
+        return "", ""
+
+    if "```" in text:
+        return text, ""
+
+    lines = text.split("\n")
+    if len(lines) == 1:
+        return text, ""
+
+    code_start = None
+    for idx, line in enumerate(lines):
+        remaining = [ln for ln in lines[idx:] if ln.strip()]
+        code_like = sum(1 for ln in remaining if _looks_like_code_line(ln))
+        if _looks_like_code_line(line) and code_like >= 2:
+            code_start = idx
+            break
+
+    if code_start is None:
+        return text, ""
+
+    prose = "\n".join(lines[:code_start]).strip()
+    code = "\n".join(lines[code_start:]).strip()
+    return prose, code
+
+
 def format_inline_comment(
     severity: str,
     category: str,
@@ -265,21 +366,34 @@ def format_inline_comment(
     description: Optional[str],
     code_snippet: Optional[str],
     fix_suggestion: Optional[str],
+    file_path: Optional[str] = None,
 ) -> str:
     severity_emoji = {"HIGH": "🔴", "MEDIUM": "🟡", "LOW": "🔵"}.get(severity, "⚪")
+    language = _infer_markdown_language(file_path)
 
     lines = [f"{severity_emoji} **[{severity}] {category}**"]
     if owasp_tag:
         lines[0] += f" — `{owasp_tag}`"
 
-    if description:
-        lines.append(f"\n{description}")
+    cleaned_description = _clean_comment_text(description)
+    if cleaned_description:
+        lines.append(f"\n{cleaned_description}")
 
-    if code_snippet:
-        lines.append(f"\n```\n{code_snippet}\n```")
+    cleaned_snippet = _clean_comment_text(code_snippet)
+    if cleaned_snippet:
+        lines.append(f"\n**Problematic code**\n\n{_fenced_code_block(cleaned_snippet, language)}")
 
-    if fix_suggestion:
-        lines.append(f"\n💡 **Fix:** {fix_suggestion}")
+    cleaned_fix = _clean_comment_text(fix_suggestion)
+    if cleaned_fix:
+        prose, code = _split_fix_suggestion(cleaned_fix)
+        if code:
+            fix_body = []
+            if prose:
+                fix_body.append(prose)
+            fix_body.append(_fenced_code_block(code, language))
+            lines.append("\n💡 **Fix**\n\n" + "\n\n".join(fix_body))
+        else:
+            lines.append(f"\n💡 **Fix**\n\n{prose}")
 
     # Hidden dedup marker at end
     lines.append(f"\n{_DEDUP_ID}")
@@ -365,6 +479,7 @@ async def auto_comment_on_review(
             description=finding.get("description"),
             code_snippet=finding.get("code_snippet"),
             fix_suggestion=finding.get("fix_suggestion"),
+            file_path=file_path,
         )
 
         import asyncio
