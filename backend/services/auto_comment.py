@@ -49,6 +49,38 @@ class AzureDevOpsCommentClient:
                 logger.error(f"Failed to fetch iterations: {e}")
         return None
 
+    async def get_change_tracking_ids(
+        self, repo: str, pr_id: int, iteration_id: int
+    ) -> Dict[str, int]:
+        """Get changeTrackingId per file path for a given iteration.
+
+        Returns a dict mapping file_path -> changeTrackingId.
+        Each file in a PR iteration has a unique changeTrackingId that MUST be
+        used in pullRequestThreadContext when posting inline comments.
+        Using the wrong changeTrackingId causes comments to render on wrong lines.
+        """
+        url = (
+            f"{self.base_url}/{repo}/pullrequests/{pr_id}"
+            f"/iterations/{iteration_id}/changes?api-version=7.1"
+        )
+        mapping: Dict[str, int] = {}
+        async with httpx.AsyncClient(timeout=15) as client:
+            try:
+                resp = await client.get(url, headers=self.headers)
+                if resp.status_code == 200:
+                    text = resp.text
+                    if text.startswith("\ufeff"):
+                        text = text[1:]
+                    entries = json.loads(text).get("changeEntries", [])
+                    for entry in entries:
+                        path = entry.get("item", {}).get("path", "")
+                        tracking_id = entry.get("changeTrackingId", 1)
+                        if path:
+                            mapping[path] = tracking_id
+            except Exception as e:
+                logger.error(f"Failed to fetch change tracking IDs: {e}")
+        return mapping
+
     async def get_existing_threads(self, repo: str, pr_id: int) -> List[dict]:
         """Fetch all existing comment threads on a PR."""
         url = f"{self.base_url}/{repo}/pullrequests/{pr_id}/threads?api-version=7.1"
@@ -86,9 +118,20 @@ class AzureDevOpsCommentClient:
         file_path: str,
         line_number: int,
         message: str,
-        iteration_id: int = 1,
+        iteration_id: int,
+        change_tracking_id: int,
     ) -> Optional[dict]:
-        """Post an inline comment on a specific line in a PR."""
+        """Post an inline comment on a specific line in a PR.
+
+        Args:
+            iteration_id: PR iteration ID (from get_latest_iteration).
+            change_tracking_id: Per-file tracking ID (from get_change_tracking_ids).
+                Using the wrong value causes comments to render on wrong files/lines.
+        """
+        if not file_path or line_number < 1 or change_tracking_id < 1 or iteration_id < 1:
+            logger.error("Refusing inline comment with incomplete Azure DevOps location context")
+            return None
+
         if not file_path.startswith("/"):
             file_path = "/" + file_path
 
@@ -110,9 +153,12 @@ class AzureDevOpsCommentClient:
                 "leftFileEnd": None,
             },
             "pullRequestThreadContext": {
-                "changeTrackingId": 1,
+                "changeTrackingId": change_tracking_id,
                 "iterationContext": {
-                    "firstComparingIteration": iteration_id,
+                    # A matching first/second iteration means the common commit,
+                    # not the PR diff. Comments on the current PR diff must refer
+                    # to the base iteration and the reviewed iteration.
+                    "firstComparingIteration": 1,
                     "secondComparingIteration": iteration_id,
                 },
             },
@@ -249,6 +295,7 @@ async def auto_comment_on_review(
     findings: List[Dict[str, Any]],
     scores: Dict[str, int],
     duration_seconds: int,
+    iteration_id: int,
 ) -> Dict[str, Any]:
     """Post all comments for a completed review (with dedup)."""
     client = AzureDevOpsCommentClient()
@@ -262,7 +309,12 @@ async def auto_comment_on_review(
     existing_keys = _build_existing_comment_keys(existing_threads)
     logger.info(f"Found {len(existing_keys)} existing bot comments on PR #{pr_id}")
 
-    iteration_id = await client.get_latest_iteration(repo, pr_id) or 1
+    # Fetch changeTrackingId per file — each file has a unique ID
+    change_tracking_map = await client.get_change_tracking_ids(repo, pr_id, iteration_id)
+    logger.info(
+        f"Change tracking map for PR #{pr_id} iter {iteration_id}: "
+        f"{len(change_tracking_map)} files"
+    )
 
     # Summary
     if "summary" in existing_keys:
@@ -318,9 +370,22 @@ async def auto_comment_on_review(
         import asyncio
         await asyncio.sleep(0.5)
 
+        # Look up the correct changeTrackingId for this file
+        normalized_for_lookup = file_path if file_path.startswith("/") else f"/{file_path}"
+        ct_id = change_tracking_map.get(normalized_for_lookup)
+        if not ct_id:
+            error = (
+                f"Skipped inline comment at {normalized_path}:{line_number}: "
+                "file is not present in the reviewed Azure DevOps iteration"
+            )
+            logger.warning(error)
+            stats["errors"].append(error)
+            continue
+
         result = await client.post_inline_comment(
             repo, pr_id, file_path, line_number, comment_text,
             iteration_id=iteration_id,
+            change_tracking_id=ct_id,
         )
         if result:
             stats["inline_posted"] += 1

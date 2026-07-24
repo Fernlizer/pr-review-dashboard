@@ -1,10 +1,13 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, func
+from sqlalchemy import Column, Integer, String, DateTime, Text, func, UniqueConstraint
 from sqlalchemy.orm import relationship
 from database import Base
 
 
 class PullRequest(Base):
     __tablename__ = "pull_requests"
+    __table_args__ = (
+        UniqueConstraint("repo", "azure_pr_id", name="uq_pull_requests_repo_azure_pr_id"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     azure_pr_id = Column(Integer, nullable=False, index=True)

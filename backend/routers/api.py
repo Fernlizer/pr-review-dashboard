@@ -1,5 +1,6 @@
 """API endpoints for PRs, reviews, findings, and stats."""
 
+from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel, Field
@@ -305,12 +306,27 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
 
 # --- Manual Trigger ---
 
-@router.post("/poll")
-async def trigger_poll(db: AsyncSession = Depends(get_db)):
-    """Manually trigger a poll cycle."""
+async def _run_poll_background():
+    """Run poll cycle in background — independent from request lifecycle."""
     from services.pr_poller import poll_and_review
-    result = await poll_and_review(db)
-    return result
+    from database import async_session
+
+    async with async_session() as db:
+        try:
+            result = await poll_and_review(db)
+            logger.info(
+                f"Background poll complete: {result['repos_polled']} repos, "
+                f"{result['new_prs']} new PRs, {result['reviews_created']} reviews"
+            )
+        except Exception as e:
+            logger.error(f"Background poll failed: {e}")
+
+
+@router.post("/poll")
+async def trigger_poll(background_tasks: BackgroundTasks):
+    """Manually trigger a poll cycle — returns immediately, runs in background."""
+    background_tasks.add_task(_run_poll_background)
+    return {"status": "started", "message": "Poll cycle started in background. Refresh in a few seconds to see results."}
 
 
 # --- Scheduler Control ---
@@ -490,14 +506,14 @@ async def submit_pr_url(
     org, project, repo, pr_id = match.groups()
     azure_pr_id = int(pr_id)
 
-    # Check if already exists
+    # Check if already exists (use .first() to handle duplicate records gracefully)
     existing = await db.execute(
         select(PullRequest).where(
             PullRequest.azure_pr_id == azure_pr_id,
             PullRequest.repo == repo,
         )
     )
-    existing_pr = existing.scalar_one_or_none()
+    existing_pr = existing.scalars().first()
 
     if existing_pr:
         # Already tracked — run review on latest
@@ -532,7 +548,7 @@ async def submit_pr_url(
         source_branch=pr_data.get("sourceRefName", "").replace("refs/heads/", ""),
         target_branch=pr_data.get("targetRefName", "").replace("refs/heads/", ""),
         status=pr_data.get("status", "active").lower(),
-        is_reviewer_required=False,
+        is_reviewer_required="no",
         azure_created_at=_parse_date(pr_data.get("creationDate", "")),
         url=url,
     )
@@ -624,8 +640,22 @@ async def comment_selected_findings(
     pr = review.pull_request
     client = AzureDevOpsCommentClient()
 
-    # Get latest iteration for inline comments
-    iteration_id = await client.get_latest_iteration(pr.repo, pr.azure_pr_id) or 1
+    # A finding is valid only for the Azure iteration that was reviewed. Using
+    # the latest iteration after a new push can place a correct line number in
+    # the wrong file or line.
+    iteration_id = review.azure_iteration_id
+    if not iteration_id:
+        raise HTTPException(
+            409,
+            "This review has no Azure DevOps iteration metadata. Re-run the review before posting inline comments.",
+        )
+
+    # Get changeTrackingId per file — required for correct inline comment placement
+    change_tracking_map = await client.get_change_tracking_ids(pr.repo, pr.azure_pr_id, iteration_id)
+    logger.info(
+        f"Change tracking map for PR #{pr.azure_pr_id} iter {iteration_id}: "
+        f"{len(change_tracking_map)} files"
+    )
 
     # Get existing threads for dedup
     existing_threads = await client.get_existing_threads(pr.repo, pr.azure_pr_id)
@@ -667,6 +697,15 @@ async def comment_selected_findings(
         import asyncio
         await asyncio.sleep(0.5)
 
+        # Look up the correct changeTrackingId for this file
+        normalized_for_lookup = file_path
+        ct_id = change_tracking_map.get(normalized_for_lookup)
+        if not ct_id:
+            errors.append(
+                f"Skipped: {file_path}:{finding.line_number} is not present in reviewed iteration {iteration_id}"
+            )
+            continue
+
         result = await client.post_inline_comment(
             repo=pr.repo,
             pr_id=pr.azure_pr_id,
@@ -674,6 +713,7 @@ async def comment_selected_findings(
             line_number=finding.line_number,
             message=comment_text,
             iteration_id=iteration_id,
+            change_tracking_id=ct_id,
         )
         if result:
             posted += 1
@@ -694,3 +734,12 @@ def _review_summary(review: Review) -> dict:
         "score_security": review.score_security,
         "completed_at": review.completed_at.isoformat() if review.completed_at else None,
     }
+
+
+def _parse_date(date_str: str) -> Optional[datetime]:
+    if not date_str:
+        return None
+    try:
+        return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return None
