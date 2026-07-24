@@ -223,7 +223,43 @@ function FindingCard({ finding, index }) {
 
 /* ── Recommendation badge ────────────────────────────────────────── */
 
-function RecommendationBadge({ rec }) {
+function RecommendationBadge({ rec, status }) {
+  if (status === 'running') {
+    return (
+      <span
+        className="inline-flex items-center gap-2xs font-medium"
+        style={{
+          fontSize: 'var(--text-sm)',
+          padding: '6px 14px',
+          borderRadius: 'var(--radius-md)',
+          background: 'var(--color-accent-bg)',
+          color: 'var(--color-accent)',
+        }}
+      >
+        <Loader2 className="w-4 h-4" style={{ animation: 'spin 1s linear infinite' }} />
+        Running
+      </span>
+    )
+  }
+
+  if (status === 'failed') {
+    return (
+      <span
+        className="inline-flex items-center gap-2xs font-medium"
+        style={{
+          fontSize: 'var(--text-sm)',
+          padding: '6px 14px',
+          borderRadius: 'var(--radius-md)',
+          background: 'var(--color-danger-bg)',
+          color: 'var(--color-danger)',
+        }}
+      >
+        <XCircle className="w-4 h-4" />
+        Failed
+      </span>
+    )
+  }
+
   const config = {
     approve: { bg: 'var(--color-success-bg)', text: 'var(--color-success)', icon: CheckCircle, label: 'Approve' },
     request_changes: { bg: 'var(--color-danger-bg)', text: 'var(--color-danger)', icon: XCircle, label: 'Request Changes' },
@@ -260,13 +296,24 @@ function PRDetail() {
   const [commenting, setCommenting] = useState(false)
   const [commentResult, setCommentResult] = useState(null)
 
-  useEffect(() => {
+  const fetchPr = () => {
     fetch(`/api/prs/${id}`).then(r => r.json()).then(setPr)
+  }
+
+  useEffect(() => {
+    fetchPr()
   }, [id])
+
+  const review = pr?.reviews?.[0]
+
+  useEffect(() => {
+    if (review?.status !== 'running') return
+    const timer = setInterval(fetchPr, 3000)
+    return () => clearInterval(timer)
+  }, [review?.status, id])
 
   if (!pr) return <LoadingSkeleton />
 
-  const review = pr.reviews?.[0]
   const findings = review?.findings || []
   const highFindings = findings.filter(f => f.severity === 'HIGH')
   const mediumFindings = findings.filter(f => f.severity === 'MEDIUM')
@@ -314,7 +361,9 @@ function PRDetail() {
     try {
       const resp = await fetch(`/api/prs/${id}/review`, { method: 'POST' })
       const data = await resp.json()
-      if (data.status === 'completed') window.location.reload()
+      if (data.status === 'started') {
+        setTimeout(fetchPr, 500)
+      }
     } catch (e) {
       console.error(e)
     } finally {
@@ -445,9 +494,9 @@ function PRDetail() {
           {/* Top bar */}
           <div className="flex items-center justify-between flex-wrap gap-sm" style={{ marginBottom: 'var(--space-lg)' }}>
             <div className="flex items-center gap-sm">
-              <RecommendationBadge rec={review.recommendation} />
+              <RecommendationBadge rec={review.recommendation} status={review.status} />
               <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-4)' }}>
-                {review.duration_seconds}s · {findings.length} finding{findings.length !== 1 ? 's' : ''}
+                {review.status === 'running' ? 'Running review' : `${review.duration_seconds ?? 0}s · ${findings.length} finding${findings.length !== 1 ? 's' : ''}`}
               </span>
             </div>
             <div className="flex items-center gap-2xs">

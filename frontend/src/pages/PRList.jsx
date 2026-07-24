@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowUpRight, Filter, Search } from 'lucide-react'
+import { ArrowUpRight, Filter, Loader2, Search } from 'lucide-react'
 
 /* ── Loading skeleton ────────────────────────────────────────────── */
 
@@ -76,6 +76,41 @@ function StatusBadge({ status }) {
 /* ── Review badge ────────────────────────────────────────────────── */
 
 function ReviewBadge({ review }) {
+  if (review.status === 'running') {
+    return (
+      <span
+        className="inline-flex items-center gap-2xs font-medium font-mono"
+        style={{
+          fontSize: 'var(--text-xs)',
+          padding: '4px 10px',
+          borderRadius: 'var(--radius-sm)',
+          background: 'var(--color-accent-bg)',
+          color: 'var(--color-accent)',
+        }}
+      >
+        <Loader2 className="w-3 h-3" style={{ animation: 'spin 1s linear infinite' }} />
+        Running
+      </span>
+    )
+  }
+
+  if (review.status === 'failed') {
+    return (
+      <span
+        className="font-medium font-mono"
+        style={{
+          fontSize: 'var(--text-xs)',
+          padding: '4px 10px',
+          borderRadius: 'var(--radius-sm)',
+          background: 'var(--color-danger-bg)',
+          color: 'var(--color-danger)',
+        }}
+      >
+        Failed
+      </span>
+    )
+  }
+
   const config = {
     approve: { bg: 'var(--color-success-bg)', text: 'var(--color-success)', label: 'Approved' },
     request_changes: { bg: 'var(--color-danger-bg)', text: 'var(--color-danger)', label: 'Changes' },
@@ -108,8 +143,8 @@ function PRList() {
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    setLoading(true)
+  const loadPrs = ({ quiet = false } = {}) => {
+    if (!quiet) setLoading(true)
     const params = new URLSearchParams()
     if (repo) params.set('repo', repo)
     if (status) params.set('status', status)
@@ -117,7 +152,17 @@ function PRList() {
       .then(r => r.json())
       .then(d => { setPrs(d.prs || []); setTotal(d.total || 0) })
       .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadPrs()
   }, [repo, status])
+
+  useEffect(() => {
+    if (!prs.some(pr => pr.latest_review?.status === 'running')) return
+    const timer = setInterval(() => loadPrs({ quiet: true }), 3000)
+    return () => clearInterval(timer)
+  }, [prs, repo, status])
 
   const repos = ['', 'purchase', 'usermgt', 'coop']
 

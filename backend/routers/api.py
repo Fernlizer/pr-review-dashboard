@@ -1,7 +1,7 @@
 """API endpoints for PRs, reviews, findings, and stats."""
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel, Field
@@ -63,7 +63,7 @@ async def list_prs(
                 "url": pr.url,
                 "discovered_at": pr.discovered_at.isoformat() if pr.discovered_at else None,
                 "azure_created_at": pr.azure_created_at.isoformat() if pr.azure_created_at else None,
-                "latest_review": _review_summary(pr.reviews[0]) if pr.reviews else None,
+                "latest_review": _review_summary(_latest_first(pr.reviews)[0]) if pr.reviews else None,
             }
             for pr in prs
         ],
@@ -128,7 +128,7 @@ async def get_pr(pr_id: int, db: AsyncSession = Depends(get_db)):
                     for f in rv.findings
                 ],
             }
-            for rv in pr.reviews
+            for rv in _latest_first(pr.reviews)
         ],
     }
 
@@ -169,6 +169,7 @@ async def list_reviews(
                 "created_at": rv.created_at.isoformat() if rv.created_at else None,
                 "pr_title": rv.pull_request.title if rv.pull_request else None,
                 "pr_repo": rv.pull_request.repo if rv.pull_request else None,
+                "pr_author": rv.pull_request.author if rv.pull_request else None,
             }
             for rv in reviews
         ],
@@ -230,10 +231,12 @@ async def get_review(review_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/prs/{pr_id}/review")
-async def trigger_review(pr_id: int, db: AsyncSession = Depends(get_db)):
+async def trigger_review(
+    pr_id: int,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
     """Manually trigger a review for a specific PR."""
-    from services.pr_poller import _process_new_pr
-    from services.azure_client import AzureDevOpsClient
 
     # Get PR from DB
     result = await db.execute(select(PullRequest).where(PullRequest.id == pr_id))
@@ -241,26 +244,8 @@ async def trigger_review(pr_id: int, db: AsyncSession = Depends(get_db)):
     if not pr:
         raise HTTPException(404, "PR not found")
 
-    client = AzureDevOpsClient()
-    pr_data = {
-        "azure_pr_id": pr.azure_pr_id,
-        "title": pr.title,
-        "description": pr.description or "",
-        "author": pr.author or "",
-        "author_email": pr.author_email or "",
-        "source_branch": pr.source_branch or "",
-        "target_branch": pr.target_branch or "",
-        "status": pr.status or "active",
-        "is_reviewer_required": pr.is_reviewer_required or "no",
-        "reviewers_json": pr.reviewers_json or "[]",
-        "url": pr.url or "",
-    }
-
-    try:
-        await _process_new_pr(db, client, pr.repo, pr_data, existing_pr=pr)
-        return {"status": "completed", "message": f"Review completed for PR #{pr.azure_pr_id}"}
-    except Exception as e:
-        raise HTTPException(500, f"Review failed: {str(e)}")
+    background_tasks.add_task(run_single_review, pr.id)
+    return {"status": "started", "message": f"Review started for PR #{pr.azure_pr_id}"}
 
 
 # --- Stats ---
@@ -785,6 +770,14 @@ def _review_summary(review: Review) -> dict:
         "score_security": review.score_security,
         "completed_at": review.completed_at.isoformat() if review.completed_at else None,
     }
+
+
+def _latest_first(reviews):
+    return sorted(
+        reviews,
+        key=lambda rv: rv.started_at or rv.created_at or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
 
 
 def _parse_date(date_str: str) -> Optional[datetime]:
