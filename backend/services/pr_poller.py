@@ -375,10 +375,34 @@ async def _process_new_pr_unlocked(
     review = Review(
         pr_id=pr.id,
         status="running",
+        summary="Review is running...",
         started_at=datetime.now(timezone.utc),
     )
     db.add(review)
     await db.flush()
+    await db.commit()
+    logger.info("Review started for PR #%s in %s (review #%s)", pr_data["azure_pr_id"], repo, review.id)
+
+    try:
+        return await _complete_review(db, client, repo, pr_data, pr, review)
+    except Exception as e:
+        review.status = "failed"
+        review.summary = f"Review failed: {type(e).__name__}: {e}"
+        review.completed_at = datetime.now(timezone.utc)
+        review.duration_seconds = int((review.completed_at - review.started_at).total_seconds())
+        await db.commit()
+        raise
+
+
+async def _complete_review(
+    db: AsyncSession,
+    client: AzureDevOpsClient,
+    repo: str,
+    pr_data: Dict[str, Any],
+    pr: PullRequest,
+    review: Review,
+):
+    """Complete a committed running review record."""
 
     # Fetch iterations and changes
     iteration_hint = pr_data.get("_review_iteration") or {}

@@ -3,6 +3,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from models import PullRequest
 from services import pr_poller
 
 
@@ -95,7 +96,7 @@ class PollerTests(unittest.IsolatedAsyncioTestCase):
         db = MagicMock()
         db.commit = AsyncMock()
         db.rollback = AsyncMock()
-        existing_pr = SimpleNamespace(id=7)
+        existing_pr = PullRequest(id=7, azure_pr_id=99, repo="purchase")
         old_review = SimpleNamespace(
             id=3,
             azure_iteration_id=1,
@@ -134,3 +135,34 @@ class PollerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(process.await_args.kwargs["existing_pr"], existing_pr)
         self.assertEqual(pr_data["_review_iteration"]["iteration_id"], 2)
         self.assertEqual(json.loads(state.last_seen_pr_ids), [99])
+
+    async def test_review_is_committed_running_before_long_work(self):
+        db = MagicMock()
+        db.commit = AsyncMock()
+        db.flush = AsyncMock()
+        db.add = MagicMock()
+        client = MagicMock()
+        client.get_pr_iterations = AsyncMock(side_effect=RuntimeError("Azure unavailable"))
+        existing_pr = PullRequest(id=7, azure_pr_id=99, repo="purchase")
+        pr_data = {
+            "azure_pr_id": 99,
+            "title": "New PR",
+            "description": "",
+            "author": "A",
+            "author_email": "",
+            "source_branch": "feature",
+            "target_branch": "main",
+            "status": "active",
+            "is_reviewer_required": "no",
+            "reviewers_json": "[]",
+            "url": "https://example.test/pr/99",
+        }
+
+        with self.assertRaises(RuntimeError):
+            await pr_poller._process_new_pr_unlocked(db, client, "purchase", pr_data, existing_pr=existing_pr)
+
+        review = db.add.call_args.args[0]
+        self.assertEqual(review.status, "failed")
+        self.assertIn("Azure unavailable", review.summary)
+        self.assertIsNotNone(review.completed_at)
+        self.assertEqual(db.commit.await_count, 2)

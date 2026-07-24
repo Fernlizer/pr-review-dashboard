@@ -160,7 +160,30 @@ function EmptyState({ icon: Icon, title, description }) {
 
 /* ── Recommendation badge ────────────────────────────────────────── */
 
-function RecommendationBadge({ rec }) {
+function RecommendationBadge({ rec, status }) {
+  if (status === 'running') {
+    return (
+      <span
+        className="inline-flex items-center gap-2xs font-medium flex-shrink-0 font-mono"
+        style={{ background: 'var(--color-accent-bg)', color: 'var(--color-accent)', padding: '3px 8px', borderRadius: 'var(--radius-sm)', fontSize: 'var(--text-xs)' }}
+      >
+        <Loader2 className="w-3 h-3" style={{ animation: 'spin 1s linear infinite' }} />
+        Running
+      </span>
+    )
+  }
+
+  if (status === 'failed') {
+    return (
+      <span
+        className="inline-flex items-center font-medium flex-shrink-0 font-mono"
+        style={{ background: 'var(--color-danger-bg)', color: 'var(--color-danger)', padding: '3px 8px', borderRadius: 'var(--radius-sm)', fontSize: 'var(--text-xs)' }}
+      >
+        Failed
+      </span>
+    )
+  }
+
   const config = {
     approve: { bg: 'var(--color-success-bg)', text: 'var(--color-success)', label: 'Approve' },
     request_changes: { bg: 'var(--color-danger-bg)', text: 'var(--color-danger)', label: 'Changes' },
@@ -195,6 +218,12 @@ function Dashboard() {
   useEffect(() => {
     refreshDashboard()
   }, [])
+
+  useEffect(() => {
+    if (!recentReviews.some(rv => rv.status === 'running')) return
+    const timer = setInterval(refreshDashboard, 3000)
+    return () => clearInterval(timer)
+  }, [recentReviews])
 
   const handleSubmitUrl = async () => {
     if (!prUrl.trim()) return
@@ -370,13 +399,13 @@ function Dashboard() {
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
               >
                 <div className="flex items-center gap-sm min-w-0">
-                  <RecommendationBadge rec={rv.recommendation} />
+                  <RecommendationBadge rec={rv.recommendation} status={rv.status} />
                   <div className="min-w-0">
                     <p className="font-medium truncate" style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink)', maxWidth: 400 }}>
                       {rv.pr_title || `PR #${rv.pr_id}`}
                     </p>
                     <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-4)', marginTop: 2 }}>
-                      {rv.pr_repo} · {rv.author}
+                      {rv.pr_repo} · {rv.pr_author || 'Unknown author'}
                     </p>
                   </div>
                 </div>
@@ -398,7 +427,9 @@ function Dashboard() {
                       </span>
                     )}
                   </div>
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-4)' }}>{rv.duration_seconds}s</span>
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-4)' }}>
+                    {rv.status === 'running' ? 'running' : `${rv.duration_seconds ?? 0}s`}
+                  </span>
                   <ArrowUpRight className="w-3.5 h-3.5" style={{ color: 'var(--color-ink-4)', transition: `color var(--dur-micro) var(--ease-out)` }} />
                 </div>
               </Link>
