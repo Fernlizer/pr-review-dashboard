@@ -1,10 +1,12 @@
 """API endpoints for PRs, reviews, findings, and stats."""
 
+import json
 from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func, desc
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -486,6 +488,38 @@ class SubmitPRUrlRequest(BaseModel):
     ])
 
 
+def _apply_azure_pr_data(pr: PullRequest, pr_data: dict, url: str):
+    reviewers = pr_data.get("reviewers", [])
+    required = any(r.get("isRequired") is True for r in reviewers)
+    pr.title = pr_data.get("title", pr.title or "")
+    pr.description = pr_data.get("description", pr.description or "")
+    pr.author = pr_data.get("createdBy", {}).get("displayName", pr.author or "")
+    pr.author_email = pr_data.get("createdBy", {}).get("uniqueName", pr.author_email or "")
+    pr.source_branch = pr_data.get("sourceRefName", pr.source_branch or "").replace("refs/heads/", "")
+    pr.target_branch = pr_data.get("targetRefName", pr.target_branch or "").replace("refs/heads/", "")
+    pr.status = pr_data.get("status", pr.status or "active").lower()
+    pr.is_reviewer_required = "yes" if required else "no"
+    pr.reviewers_json = json.dumps([
+        {"name": r.get("displayName", ""), "required": r.get("isRequired") is True}
+        for r in reviewers
+    ])
+    pr.azure_created_at = _parse_date(pr_data.get("creationDate", "")) or pr.azure_created_at
+    pr.url = url
+
+
+def _submit_pr_response(status: str, pr: PullRequest, message: str, url: str) -> dict:
+    return {
+        "status": status,
+        "pr_id": pr.id,
+        "azure_pr_id": pr.azure_pr_id,
+        "message": message,
+        "url": url,
+        "title": pr.title,
+        "author": pr.author,
+        "repo": pr.repo,
+    }
+
+
 @router.post("/prs/submit-url", response_model=dict)
 async def submit_pr_url(
     body: SubmitPRUrlRequest,
@@ -508,6 +542,19 @@ async def submit_pr_url(
     org, project, repo, pr_id = match.groups()
     azure_pr_id = int(pr_id)
 
+    # Fetch PR details from Azure DevOps before creating/updating local state.
+    from services.azure_client import AzureDevOpsClient
+    client = AzureDevOpsClient()
+
+    try:
+        pr_url = f"{client.base_url}/_apis/git/repositories/{repo}/pullrequests/{azure_pr_id}?api-version=7.1"
+        pr_data = await client._get(pr_url)
+    except Exception as e:
+        raise HTTPException(404, f"Could not fetch PR #{azure_pr_id} from repo '{repo}': {e}")
+
+    if not pr_data:
+        raise HTTPException(404, f"PR #{azure_pr_id} not found in repo '{repo}'")
+
     # Check if already exists (use .first() to handle duplicate records gracefully)
     existing = await db.execute(
         select(PullRequest).where(
@@ -518,58 +565,60 @@ async def submit_pr_url(
     existing_pr = existing.scalars().first()
 
     if existing_pr:
-        # Already tracked — run review on latest
+        _apply_azure_pr_data(existing_pr, pr_data, url)
+        await db.commit()
+
         background_tasks.add_task(run_single_review, existing_pr.id)
-        return {
-            "status": "existing",
-            "pr_id": existing_pr.id,
-            "message": f"PR #{azure_pr_id} already tracked. Running review...",
-            "url": url,
-        }
-
-    # Fetch PR details from Azure DevOps
-    from services.azure_client import AzureDevOpsClient
-    client = AzureDevOpsClient()
-
-    try:
-        # Get PR details
-        pr_url = f"{client.base_url}/_apis/git/repositories/{repo}/pullrequests/{azure_pr_id}?api-version=7.1"
-        pr_data = await client._get(pr_url)
-    except Exception as e:
-        raise HTTPException(404, f"Could not fetch PR #{azure_pr_id} from repo '{repo}': {e}")
-
-    if not pr_data:
-        raise HTTPException(404, f"PR #{azure_pr_id} not found in repo '{repo}'")
+        return _submit_pr_response(
+            "existing",
+            existing_pr,
+            f"PR #{azure_pr_id} already tracked. Running review...",
+            url,
+        )
 
     # Create PR record
     pr = PullRequest(
         azure_pr_id=azure_pr_id,
         repo=repo,
-        title=pr_data.get("title", ""),
-        author=pr_data.get("createdBy", {}).get("displayName", ""),
-        source_branch=pr_data.get("sourceRefName", "").replace("refs/heads/", ""),
-        target_branch=pr_data.get("targetRefName", "").replace("refs/heads/", ""),
-        status=pr_data.get("status", "active").lower(),
-        is_reviewer_required="no",
-        azure_created_at=_parse_date(pr_data.get("creationDate", "")),
         url=url,
     )
+    _apply_azure_pr_data(pr, pr_data, url)
     db.add(pr)
-    await db.commit()
-    await db.refresh(pr)
+    try:
+        await db.commit()
+        await db.refresh(pr)
+    except IntegrityError:
+        # A scheduler/manual poll may have inserted the same PR between the
+        # existence check and commit. Recover by loading that row and reviewing it.
+        await db.rollback()
+        existing = await db.execute(
+            select(PullRequest).where(
+                PullRequest.azure_pr_id == azure_pr_id,
+                PullRequest.repo == repo,
+            )
+        )
+        pr = existing.scalars().first()
+        if not pr:
+            raise
+        _apply_azure_pr_data(pr, pr_data, url)
+        await db.commit()
+        background_tasks.add_task(run_single_review, pr.id)
+        return _submit_pr_response(
+            "existing",
+            pr,
+            f"PR #{azure_pr_id} already tracked. Running review...",
+            url,
+        )
 
     # Run review in background
     background_tasks.add_task(run_single_review, pr.id)
 
-    return {
-        "status": "added",
-        "pr_id": pr.id,
-        "message": f"PR #{azure_pr_id} added to system. Running review...",
-        "url": url,
-        "title": pr.title,
-        "author": pr.author,
-        "repo": repo,
-    }
+    return _submit_pr_response(
+        "added",
+        pr,
+        f"PR #{azure_pr_id} added to system. Running review...",
+        url,
+    )
 
 
 async def run_single_review(pr_id: int):
