@@ -187,9 +187,13 @@ function Dashboard() {
   const [submitting, setSubmitting] = useState(false)
   const [submitResult, setSubmitResult] = useState(null)
 
-  useEffect(() => {
+  const refreshDashboard = () => {
     fetch('/api/stats').then(r => r.json()).then(setStats)
     fetch('/api/reviews?limit=10').then(r => r.json()).then(d => setRecentReviews(d.reviews || []))
+  }
+
+  useEffect(() => {
+    refreshDashboard()
   }, [])
 
   const handleSubmitUrl = async () => {
@@ -208,6 +212,8 @@ function Dashboard() {
       } else {
         setSubmitResult(data)
         setPrUrl('')
+        refreshDashboard()
+        setTimeout(refreshDashboard, 5000)
       }
     } catch (e) {
       setSubmitResult({ error: e.message })
@@ -281,7 +287,7 @@ function Dashboard() {
           }}>
             {submitResult.error
               ? `❌ ${submitResult.error}`
-              : `✅ ${submitResult.message} (${submitResult.repo} #${submitResult.pr_id})`
+              : `✅ ${submitResult.message} (${submitResult.repo || 'PR'} #${submitResult.azure_pr_id || submitResult.pr_id})`
             }
           </div>
         )}
