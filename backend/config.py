@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     AZURE_PROJECT: str = "AgriTech"
     REVIEWER_NAME: str = "FERN"
     POLL_INTERVAL_MINUTES: int = 10
-    REPOS: str = "purchase,usermgt,coop"
+    REPOS: str = "purchase,usermgt,coop,backoffice"
 
     @property
     def repos_list(self) -> List[str]:

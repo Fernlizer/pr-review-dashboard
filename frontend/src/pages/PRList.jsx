@@ -103,6 +103,7 @@ function PRList() {
             <option value="purchase">purchase</option>
             <option value="usermgt">usermgt</option>
             <option value="coop">coop</option>
+            <option value="backoffice">backoffice</option>
           </select>
           <select value={status} onChange={e => setStatus(e.target.value)} style={selectStyle}>
             <option value="">all states</option>

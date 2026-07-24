@@ -161,7 +161,7 @@ AZURE_DEVOPS_PAT=your_pat_here
 REVIEWER_NAME=Your Name
 
 # Repos ที่ต้องการ poll (comma-separated)
-REPOS=purchase,usermgt,coop
+REPOS=purchase,usermgt,coop,backoffice
 
 # ความถี่ polling (นาที)
 POLL_INTERVAL_MINUTES=10
@@ -198,7 +198,7 @@ docker compose up -d
 |----------|---------|----------|
 | `AZURE_DEVOPS_PAT` | *(required)* | Personal Access Token จาก Azure DevOps |
 | `REVIEWER_NAME` | `FERN` | ชื่อที่ใช้กรอง PR (ตรงกับ `displayName` หรือ `uniqueName` ใน Azure DevOps) |
-| `REPOS` | `purchase,usermgt,coop` | Repositories ที่ต้องการ poll (comma-separated) |
+| `REPOS` | `purchase,usermgt,coop,backoffice` | Repositories ที่ต้องการ poll (comma-separated) |
 | `POLL_INTERVAL_MINUTES` | `10` | ความถี่ polling (นาที) — เปลี่ยนได้ผ่านหน้า Settings |
 
 ### Database URL
@@ -405,7 +405,7 @@ docker compose up -d backend
 แก้ `.env`:
 
 ```env
-REPOS=purchase,usermgt,coop,document-lambda,new-repo
+REPOS=purchase,usermgt,coop,backoffice,document-lambda,new-repo
 ```
 
 > คั่นด้วย comma, ไม่มีช่องว่าง
