@@ -12,6 +12,7 @@ import {
   GitBranch,
   Loader2,
   MessageSquare,
+  ExternalLink,
   Radio,
   RefreshCw,
   Shield,
@@ -213,26 +214,28 @@ function PRDetail() {
               <span className="flex items-center gap-2xs"><GitBranch className="w-4 h-4" /> {pr.source_branch} → {pr.target_branch}</span>
             </div>
           </div>
-          <button
-            onClick={runReview}
-            disabled={reviewing || review?.status === 'running'}
-            style={{
-              minHeight: 48,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--space-xs)',
-              border: '1px solid var(--color-rule-living)',
-              borderRadius: 'var(--radius-input)',
-              background: 'var(--color-accent)',
-              color: 'var(--color-accent-ink)',
-              padding: '0 var(--space-lg)',
-              fontWeight: 800,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {reviewing || review?.status === 'running' ? <Loader2 className="w-4 h-4" style={{ animation: 'orbit-turn 1.2s linear infinite' }} /> : <RefreshCw className="w-4 h-4" />}
-            {review?.status === 'running' ? 'Scanning' : 'Run review'}
-          </button>
+          <div className="flex items-center gap-sm flex-wrap">
+            {pr.url && (
+              <a
+                href={pr.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={externalButton}
+                aria-label={`Open Azure DevOps PR #${pr.azure_pr_id} in a new tab`}
+              >
+                <ExternalLink className="w-4 h-4" />
+                Open PR
+              </a>
+            )}
+            <button
+              onClick={runReview}
+              disabled={reviewing || review?.status === 'running'}
+              style={primaryButton}
+            >
+              {reviewing || review?.status === 'running' ? <Loader2 className="w-4 h-4" style={{ animation: 'orbit-turn 1.2s linear infinite' }} /> : <RefreshCw className="w-4 h-4" />}
+              {review?.status === 'running' ? 'Scanning' : 'Run review'}
+            </button>
+          </div>
         </div>
 
         {review && (
@@ -390,6 +393,14 @@ const secondaryButton = {
   border: '1px solid var(--color-rule)',
   background: 'var(--color-paper-3)',
   color: 'var(--color-ink-2)',
+}
+
+const externalButton = {
+  ...primaryButton,
+  border: '1px solid var(--color-rule-living)',
+  background: 'var(--color-accent-bg)',
+  color: 'var(--color-accent)',
+  textDecoration: 'none',
 }
 
 export default PRDetail
