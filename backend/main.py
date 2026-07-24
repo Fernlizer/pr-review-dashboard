@@ -30,6 +30,7 @@ async def scheduled_poll():
             logger.info(
                 f"Poll complete: {result['repos_polled']} repos, "
                 f"{result['new_prs']} new PRs, "
+                f"{result.get('updated_prs', 0)} updated PRs, "
                 f"{result['reviews_created']} reviews created"
             )
             if result["errors"]:
