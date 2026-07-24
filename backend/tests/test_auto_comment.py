@@ -2,10 +2,48 @@ import unittest
 from unittest import mock
 from unittest.mock import AsyncMock, patch
 
-from services.auto_comment import AzureDevOpsCommentClient, auto_comment_on_review
+from services.auto_comment import AzureDevOpsCommentClient, auto_comment_on_review, format_inline_comment
 
 
 class InlineCommentTests(unittest.IsolatedAsyncioTestCase):
+    def test_format_inline_comment_fences_multiline_fix_code(self):
+        message = format_inline_comment(
+            severity="HIGH",
+            category="SECURITY",
+            owasp_tag="A01:2021-Broken Access Control",
+            description="เพิ่ม query parameter `mock` บน production endpoint ทำให้ bypass flow ได้",
+            code_snippet="@Query('mock') mock?: string,\nreturn service.create(request, mock === 'true')",
+            fix_suggestion=(
+                "ห้ามรับ mock flag จาก client บน production endpoint ให้ใช้ config/env ภายในแทน:\n"
+                "async createPaymentRecord(\n"
+                "  @Body() request: CreatePaymentRecordRequestDto,\n"
+                ") {\n"
+                "  return this.paymentRecordService.createPaymentRecord(request, false);\n"
+                "}"
+            ),
+            file_path="/src/payment-record.controller.ts",
+        )
+
+        self.assertIn("**Problematic code**\n\n```typescript", message)
+        self.assertIn("@Query('mock') mock?: string,", message)
+        self.assertIn("💡 **Fix**\n\nห้ามรับ mock flag", message)
+        self.assertIn("```typescript\nasync createPaymentRecord(", message)
+        self.assertNotIn("💡 **Fix:** async createPaymentRecord", message)
+
+    def test_format_inline_comment_keeps_existing_fix_fence_without_double_wrapping(self):
+        message = format_inline_comment(
+            severity="MEDIUM",
+            category="BUG",
+            owasp_tag=None,
+            description="missing guard",
+            code_snippet="if (user.name.length) return true",
+            fix_suggestion="ตรวจ null ก่อนใช้งาน\n\n```typescript\nif (user?.name?.length) return true\n```",
+            file_path="/src/user.ts",
+        )
+
+        self.assertIn("ตรวจ null ก่อนใช้งาน", message)
+        self.assertEqual(message.count("```typescript"), 2)
+
     async def test_post_inline_comment_uses_base_and_reviewed_iterations(self):
         client = AzureDevOpsCommentClient()
         client._post_comment = AsyncMock(return_value={"id": 1})
