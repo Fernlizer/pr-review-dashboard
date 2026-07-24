@@ -316,7 +316,9 @@ async def _run_poll_background():
             result = await poll_and_review(db)
             logger.info(
                 f"Background poll complete: {result['repos_polled']} repos, "
-                f"{result['new_prs']} new PRs, {result['reviews_created']} reviews"
+                f"{result['new_prs']} new PRs, "
+                f"{result.get('updated_prs', 0)} updated PRs, "
+                f"{result['reviews_created']} reviews"
             )
         except Exception as e:
             logger.error(f"Background poll failed: {e}")

@@ -55,7 +55,13 @@ async def _poll_and_review(db: AsyncSession) -> Dict[str, Any]:
     """
     client = AzureDevOpsClient()
     reviewer = settings.REVIEWER_NAME
-    summary = {"repos_polled": 0, "new_prs": 0, "reviews_created": 0, "errors": []}
+    summary = {
+        "repos_polled": 0,
+        "new_prs": 0,
+        "updated_prs": 0,
+        "reviews_created": 0,
+        "errors": [],
+    }
 
     for repo in settings.repos_list:
         try:
@@ -131,8 +137,10 @@ async def _poll_and_review(db: AsyncSession) -> Dict[str, Any]:
                 # every already-open PR as new using the stale, empty seen_ids.
                 continue
 
-            # Filter to new PRs only
+            # Filter to new PRs only, then separately detect PRs that were
+            # already seen but moved to a newer Azure iteration/commit.
             new_prs = [pr for pr in prs if pr["azure_pr_id"] not in seen_ids]
+            updated_prs = await _find_updated_prs(db, client, repo, prs, seen_ids)
 
             # Additional dedup: skip PRs that already have a completed review recently
             already_reviewed_ids = set()
@@ -156,7 +164,7 @@ async def _poll_and_review(db: AsyncSession) -> Dict[str, Any]:
                     )
                 new_prs = [pr for pr in new_prs if pr["azure_pr_id"] not in already_reviewed_ids]
 
-            if not new_prs:
+            if not new_prs and not updated_prs:
                 # No new PRs — just update poll time
                 state.last_poll_at = datetime.now(timezone.utc)
                 state.last_seen_pr_ids = json.dumps(list(current_ids))
@@ -165,7 +173,11 @@ async def _poll_and_review(db: AsyncSession) -> Dict[str, Any]:
                 continue
 
             summary["new_prs"] += len(new_prs)
-            logger.info(f"[{repo}] Found {len(new_prs)} new PR(s) for {reviewer}")
+            summary["updated_prs"] += len(updated_prs)
+            logger.info(
+                f"[{repo}] Found {len(new_prs)} new PR(s) and "
+                f"{len(updated_prs)} updated PR(s) for {reviewer}"
+            )
 
             completed_ids = set()
 
@@ -179,6 +191,20 @@ async def _poll_and_review(db: AsyncSession) -> Dict[str, Any]:
                 except Exception as e:
                     await db.rollback()
                     error_msg = f"Error processing PR #{pr_data['azure_pr_id']} in {repo}: {e}"
+                    logger.error(error_msg)
+                    summary["errors"].append(error_msg)
+
+            # Process PRs that already existed but have newer code than the
+            # latest completed review captured.
+            for pr_data, existing_pr in updated_prs:
+                try:
+                    completed = await _process_new_pr(db, client, repo, pr_data, existing_pr=existing_pr)
+                    if completed:
+                        completed_ids.add(pr_data["azure_pr_id"])
+                        summary["reviews_created"] += 1
+                except Exception as e:
+                    await db.rollback()
+                    error_msg = f"Error processing updated PR #{pr_data['azure_pr_id']} in {repo}: {e}"
                     logger.error(error_msg)
                     summary["errors"].append(error_msg)
 
@@ -199,6 +225,86 @@ async def _poll_and_review(db: AsyncSession) -> Dict[str, Any]:
             summary["errors"].append(error_msg)
 
     return summary
+
+
+async def _find_updated_prs(
+    db: AsyncSession,
+    client: AzureDevOpsClient,
+    repo: str,
+    prs: List[Dict[str, Any]],
+    seen_ids: set,
+) -> List[tuple[Dict[str, Any], PullRequest]]:
+    """Return seen PRs whose latest Azure iteration is newer than the last review."""
+    updated = []
+    seen_prs = [pr for pr in prs if pr["azure_pr_id"] in seen_ids]
+
+    for pr_data in seen_prs:
+        existing = await _get_existing_pr(db, repo, pr_data["azure_pr_id"])
+        if not existing:
+            continue
+
+        latest_review = await _get_latest_completed_review(db, existing.id)
+        if not latest_review:
+            continue
+
+        iter_id, source_sha, target_sha = await client.get_pr_iterations(repo, pr_data["azure_pr_id"])
+        if not iter_id:
+            continue
+
+        if _review_matches_iteration(latest_review, iter_id, source_sha, target_sha):
+            continue
+
+        logger.info(
+            "[%s] PR #%s changed since review #%s: iteration %s -> %s",
+            repo,
+            pr_data["azure_pr_id"],
+            latest_review.id,
+            latest_review.azure_iteration_id,
+            iter_id,
+        )
+        pr_data["_review_iteration"] = {
+            "iteration_id": iter_id,
+            "source_sha": source_sha,
+            "target_sha": target_sha,
+        }
+        updated.append((pr_data, existing))
+
+    return updated
+
+
+async def _get_existing_pr(db: AsyncSession, repo: str, azure_pr_id: int) -> Optional[PullRequest]:
+    result = await db.execute(
+        select(PullRequest).where(
+            PullRequest.azure_pr_id == azure_pr_id,
+            PullRequest.repo == repo,
+        )
+    )
+    return result.scalars().first()
+
+
+async def _get_latest_completed_review(db: AsyncSession, pr_id: int) -> Optional[Review]:
+    result = await db.execute(
+        select(Review)
+        .where(Review.pr_id == pr_id, Review.status == "completed")
+        .order_by(Review.id.desc())
+        .limit(1)
+    )
+    return result.scalars().first()
+
+
+def _review_matches_iteration(
+    review: Review,
+    iteration_id: int,
+    source_sha: Optional[str],
+    target_sha: Optional[str],
+) -> bool:
+    if review.azure_iteration_id != iteration_id:
+        return False
+    if source_sha and review.source_commit_id != source_sha:
+        return False
+    if target_sha and review.target_commit_id != target_sha:
+        return False
+    return True
 
 
 async def _process_new_pr(
@@ -254,6 +360,17 @@ async def _process_new_pr_unlocked(
             db.add(pr)
             await db.flush()
 
+    pr.title = pr_data.get("title", pr.title)
+    pr.description = pr_data.get("description", pr.description or "")
+    pr.author = pr_data.get("author", pr.author)
+    pr.author_email = pr_data.get("author_email", pr.author_email or "")
+    pr.source_branch = pr_data.get("source_branch", pr.source_branch)
+    pr.target_branch = pr_data.get("target_branch", pr.target_branch)
+    pr.status = pr_data.get("status", pr.status or "active")
+    pr.is_reviewer_required = pr_data.get("is_reviewer_required", pr.is_reviewer_required)
+    pr.reviewers_json = pr_data.get("reviewers_json", pr.reviewers_json or "[]")
+    pr.url = pr_data.get("url", pr.url)
+
     # Create review record (pending)
     review = Review(
         pr_id=pr.id,
@@ -264,7 +381,13 @@ async def _process_new_pr_unlocked(
     await db.flush()
 
     # Fetch iterations and changes
-    iter_id, source_sha, target_sha = await client.get_pr_iterations(repo, pr_data["azure_pr_id"])
+    iteration_hint = pr_data.get("_review_iteration") or {}
+    if iteration_hint:
+        iter_id = iteration_hint["iteration_id"]
+        source_sha = iteration_hint.get("source_sha")
+        target_sha = iteration_hint.get("target_sha")
+    else:
+        iter_id, source_sha, target_sha = await client.get_pr_iterations(repo, pr_data["azure_pr_id"])
     if not iter_id:
         review.status = "failed"
         review.summary = "No iterations found for this PR"
