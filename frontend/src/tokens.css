@@ -1,80 +1,99 @@
-/* Hallmark · genre: atmospheric · theme: Midnight · designed-as-app
- * Paper band: dark · Display style: mono · Accent hue: emerald (160)
- */
+/* Hallmark · pre-emit critique: P5 H4 E4 S5 R4 V5 */
+/* Hallmark · genre: atmospheric · macrostructure: Living Orbit Workbench · theme: custom Night Garden · nav: N3 side rail · chrome: pass */
 
 :root {
-  /* ── Paper (dark canvas) ───────────────────────────────────── */
-  --color-paper:      oklch(13% 0.008 260);
-  --color-paper-2:    oklch(16% 0.010 260);
-  --color-paper-3:    oklch(19% 0.010 260);
-  --color-paper-4:    oklch(22% 0.010 260);
+  /* ── Canvas ───────────────────────────────────────────────── */
+  --color-paper:        oklch(10% 0.018 268);
+  --color-paper-2:      oklch(14% 0.024 268);
+  --color-paper-3:      oklch(18% 0.030 268);
+  --color-paper-4:      oklch(23% 0.035 268);
+  --color-paper-veil:   oklch(13% 0.026 268 / 0.76);
+  --color-panel-glow:   oklch(50% 0.110 168 / 0.18);
 
-  /* ── Ink (text) ────────────────────────────────────────────── */
-  --color-ink:        oklch(94% 0.006 260);
-  --color-ink-2:      oklch(72% 0.008 260);
-  --color-ink-3:      oklch(52% 0.008 260);
-  --color-ink-4:      oklch(38% 0.008 260);
+  /* ── Ink ──────────────────────────────────────────────────── */
+  --color-ink:          oklch(94% 0.010 250);
+  --color-ink-2:        oklch(77% 0.014 250);
+  --color-ink-3:        oklch(58% 0.018 250);
+  --color-ink-4:        oklch(43% 0.018 250);
+  --color-ink-inverse:  oklch(12% 0.024 168);
 
-  /* ── Rules & borders ───────────────────────────────────────── */
-  --color-rule:       oklch(26% 0.010 260);
-  --color-rule-2:     oklch(22% 0.010 260);
+  /* ── Rules ────────────────────────────────────────────────── */
+  --color-rule:         oklch(30% 0.030 260);
+  --color-rule-2:       oklch(38% 0.040 260);
+  --color-rule-living:  oklch(58% 0.110 168 / 0.42);
 
-  /* ── Accent (emerald) ──────────────────────────────────────── */
-  --color-accent:     oklch(72% 0.17 160);
-  --color-accent-2:   oklch(65% 0.15 160);
-  --color-accent-bg:  oklch(20% 0.04 160);
-  --color-accent-ink: oklch(14% 0.04 160);
+  /* ── Living signal ────────────────────────────────────────── */
+  --color-accent:       oklch(76% 0.145 168);
+  --color-accent-2:     oklch(68% 0.125 178);
+  --color-accent-bg:    oklch(22% 0.058 168);
+  --color-accent-soft:  oklch(30% 0.075 168 / 0.54);
+  --color-accent-ink:   oklch(11% 0.030 168);
+  --color-focus:        oklch(78% 0.140 168);
 
-  /* ── Semantic ──────────────────────────────────────────────── */
-  --color-focus:      oklch(72% 0.17 160);
-  --color-danger:     oklch(62% 0.22 25);
-  --color-danger-bg:  oklch(20% 0.06 25);
-  --color-warning:    oklch(75% 0.18 80);
-  --color-warning-bg: oklch(22% 0.05 80);
-  --color-info:       oklch(65% 0.15 250);
-  --color-info-bg:    oklch(20% 0.04 250);
-  --color-success:    oklch(72% 0.17 160);
-  --color-success-bg: oklch(20% 0.04 160);
+  /* ── Risk spectrum ────────────────────────────────────────── */
+  --color-danger:       oklch(67% 0.205 28);
+  --color-danger-bg:    oklch(22% 0.070 28);
+  --color-warning:      oklch(79% 0.155 82);
+  --color-warning-bg:   oklch(24% 0.060 82);
+  --color-info:         oklch(72% 0.120 232);
+  --color-info-bg:      oklch(22% 0.055 232);
+  --color-success:      oklch(76% 0.145 168);
+  --color-success-bg:   oklch(22% 0.058 168);
 
-  /* ── Typography ────────────────────────────────────────────── */
+  /* ── Atmospheric blooms ───────────────────────────────────── */
+  --color-bloom-life:   oklch(60% 0.150 168 / 0.18);
+  --color-bloom-royal:  oklch(47% 0.130 286 / 0.16);
+  --color-bloom-gold:   oklch(74% 0.115 86 / 0.12);
+
+  /* ── Typography ───────────────────────────────────────────── */
+  --font-display: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-body:    "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono:    "JetBrains Mono", ui-monospace, "Cascadia Code", "Fira Code", monospace;
 
-  --text-xs:      0.75rem;    /* 12px */
-  --text-sm:      0.8125rem;  /* 13px */
-  --text-base:    0.875rem;   /* 14px */
-  --text-md:      1rem;       /* 16px */
-  --text-lg:      1.25rem;    /* 20px */
-  --text-xl:      1.5rem;     /* 24px */
-  --text-2xl:     1.875rem;   /* 30px */
+  --text-xs:      0.75rem;
+  --text-sm:      0.8125rem;
+  --text-base:    0.875rem;
+  --text-md:      1rem;
+  --text-lg:      1.25rem;
+  --text-xl:      1.5rem;
+  --text-2xl:     1.875rem;
+  --text-3xl:     2.5rem;
+  --text-4xl:     clamp(2.4rem, 6vw, 5.8rem);
 
-  /* ── Spacing (4pt scale) ───────────────────────────────────── */
-  --space-3xs:    0.125rem;   /* 2px */
-  --space-2xs:    0.25rem;    /* 4px */
-  --space-xs:     0.5rem;     /* 8px */
-  --space-sm:     0.75rem;    /* 12px */
-  --space-md:     1rem;       /* 16px */
-  --space-lg:     1.5rem;     /* 24px */
-  --space-xl:     2rem;       /* 32px */
-  --space-2xl:    3rem;       /* 48px */
-  --space-3xl:    4rem;       /* 64px */
+  /* ── Spacing ──────────────────────────────────────────────── */
+  --space-3xs:    0.125rem;
+  --space-2xs:    0.25rem;
+  --space-xs:     0.5rem;
+  --space-sm:     0.75rem;
+  --space-md:     1rem;
+  --space-lg:     1.5rem;
+  --space-xl:     2rem;
+  --space-2xl:    3rem;
+  --space-3xl:    4rem;
+  --space-4xl:    6rem;
 
-  /* ── Radius ────────────────────────────────────────────────── */
-  --radius-sm:    6px;
-  --radius-md:    8px;
-  --radius-lg:    12px;
-  --radius-xl:    16px;
+  /* ── Radius ───────────────────────────────────────────────── */
+  --radius-sm:    0.375rem;
+  --radius-md:    0.625rem;
+  --radius-lg:    1rem;
+  --radius-xl:    1.5rem;
+  --radius-card:  1.25rem;
+  --radius-input: 0.75rem;
   --radius-full:  9999px;
 
-  /* ── Motion ────────────────────────────────────────────────── */
+  /* ── Effects ──────────────────────────────────────────────── */
+  --shadow-panel: 0 24px 80px oklch(4% 0.020 268 / 0.42);
+  --shadow-lift: 0 26px 90px oklch(45% 0.120 168 / 0.16);
+
+  /* ── Motion ───────────────────────────────────────────────── */
   --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in:      cubic-bezier(0.7, 0, 0.84, 0);
   --ease-in-out:  cubic-bezier(0.65, 0, 0.35, 1);
   --dur-micro:    120ms;
   --dur-short:    220ms;
-  --dur-long:     420ms;
+  --dur-long:     520ms;
 
-  /* ── Z-index ───────────────────────────────────────────────── */
+  /* ── Z-index ──────────────────────────────────────────────── */
   --z-base:       1;
   --z-raised:     10;
   --z-dropdown:   100;

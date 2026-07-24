@@ -1,64 +1,79 @@
 # Design — PR Review Dashboard
 
-A locked design system for this app. Every page redesign reads this file before
-emitting code. Do not regenerate per page — extend or amend this file when the
-system needs to grow.
+Locked design direction for the app.
+
+## Concept
+
+**Living Orbit** — a private mission-control habitat for one reviewer.
+
+The interface should feel like a quiet luxury spacecraft that is alive: dark,
+expensive, precise, and breathing. The app is not a generic admin dashboard and
+must not look like a flat 2000s table/card grid.
+
+## Audience
+
+Single operator: Sasharat / the repo owner using the service as a personal PR
+review cockpit.
+
+## Primary use
+
+The home page is a system overview and control surface:
+
+- overall review/polling health
+- current running review status
+- quick PR URL submission
+- scheduler/poller visibility
+- recent review signals
+- risk/finding summary
 
 ## Genre
-atmospheric
+
+atmospheric + luxury
 
 ## Macrostructure family
-- App pages: Workbench (sidebar + content area, functional density)
-- No marketing or content pages in this app.
 
-## Theme — Midnight
+- App shell: side-rail command habitat
+- Dashboard: Living Orbit Workbench
+- PR list: Signal Feed
+- PR detail: Scan Chamber
+- Settings: Control Room
 
-- `--color-paper`     oklch(13% 0.008 260)     deep blue-black
-- `--color-paper-2`   oklch(16% 0.010 260)     raised surface
-- `--color-paper-3`   oklch(19% 0.010 260)     elevated surface
-- `--color-ink`       oklch(94% 0.006 260)     primary text
-- `--color-ink-2`     oklch(72% 0.008 260)     secondary text
-- `--color-ink-3`     oklch(52% 0.008 260)     muted text
-- `--color-rule`      oklch(26% 0.010 260)     borders
-- `--color-accent`    oklch(72% 0.17 160)      emerald
-- `--color-accent-2`  oklch(65% 0.15 160)      emerald darker
-- `--color-focus`     oklch(72% 0.17 160)      focus ring (same as accent)
-- `--color-danger`    oklch(62% 0.22 25)       red
-- `--color-warning`   oklch(75% 0.18 80)       amber
-- `--color-info`      oklch(65% 0.15 250)      blue
+## Theme — custom Night Garden
+
+- deep blue-black canvas
+- emerald/cyan living signal
+- muted royal/violet and gold blooms in the background
+- amber/red risk spectrum
+- surfaces use depth, softened borders, and glow restraint
+- no literal rockets, planets, emoji, fake browser chrome, or gimmicky space art
 
 ## Typography
-- Display: Inter, weight 600, style normal
-- Body:    Inter, weight 400
-- Mono:    JetBrains Mono, weight 400
-- Display tracking: -0.025em
-- Type scale anchor: major third (1.25) from 16px base
 
-## Spacing
-4-point named scale. The values are in `tokens.css`. Pages must use named
-tokens (`var(--space-md)`), never raw values.
+- Display: Inter 800, tight, roman
+- Body: Inter 400–600
+- Mono: JetBrains Mono for system telemetry, IDs, durations, and small labels
+- No italic headings
 
 ## Motion
-- Easings: `--ease-out: cubic-bezier(0.16, 1, 0.3, 1)`
-- Reveal pattern: fade + subtle slide (transform + opacity only)
-- Reduced-motion fallback: opacity-only, ≤ 150ms
 
-## Microinteractions stance
-- Silent success (no celebratory toasts)
-- Hover delay 800ms on tooltips · focus delay 0ms
-- Button press: translateY(1px) on active
-- Cards: subtle border-color shift on hover
+- Breathing pulse only for real running states
+- Orbit rotation only for intentional scan/poll affordances
+- Reduced-motion fallback must keep animation short
+- No bouncy easing, no celebration effects
 
-## CTA voice
-- Primary CTA: solid accent fill, 8px radius, 13px weight 600 text
-- Secondary CTA: outline (rule border), 8px radius, 13px weight 500 text
+## Component voice
 
-## Per-page allowances
-- App pages MUST NOT use enrichment — function carries the page.
-- All pages share the sidebar nav, wordmark, accent colour, type pairing.
-- Score rings use SVG + CSS animation (functional, not decorative).
+- Buttons: pill/input-radius, solid accent for primary, atmospheric outline for secondary
+- Cards: panels, chambers, fields, signals
+- Running review: “scanning” with pulse
+- Review recommendations:
+  - approve = clear
+  - request changes = mutate
+  - comment = observe
 
-## Exports
+## Non-goals
 
-### tokens.css
-See `src/tokens.css` for the complete token set.
+- Do not preserve the previous admin-card layout.
+- Do not add fake sci-fi chrome.
+- Do not invent product metrics.
+- Do not add a motion dependency unless a later task specifically needs it.
