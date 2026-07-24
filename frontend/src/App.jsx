@@ -13,10 +13,13 @@ function App() {
     setPolling(true)
     try {
       await fetch('/api/poll', { method: 'POST' })
-      window.location.reload()
+      // Backend returns immediately — poll runs in background
+      // Auto-reload after 5 seconds to show updated results
+      setTimeout(() => {
+        window.location.reload()
+      }, 5000)
     } catch (e) {
       console.error(e)
-    } finally {
       setPolling(false)
     }
   }

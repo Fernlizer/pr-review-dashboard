@@ -1,5 +1,6 @@
 """PR Poller — checks for new PRs and triggers reviews."""
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -14,6 +15,8 @@ from services.security_scanner import run_security_scan
 from config import settings
 
 logger = logging.getLogger(__name__)
+_poll_lock = asyncio.Lock()
+_review_locks: Dict[str, asyncio.Lock] = {}
 
 
 async def get_or_create_poll_state(db: AsyncSession, repo: str) -> PollState:
@@ -27,6 +30,22 @@ async def get_or_create_poll_state(db: AsyncSession, repo: str) -> PollState:
 
 
 async def poll_and_review(db: AsyncSession) -> Dict[str, Any]:
+    """Run at most one poll cycle per application process at a time."""
+    if _poll_lock.locked():
+        logger.warning("Poll requested while another poll is still running; skipping duplicate run")
+        return {
+            "repos_polled": 0,
+            "new_prs": 0,
+            "reviews_created": 0,
+            "errors": [],
+            "status": "already_running",
+        }
+
+    async with _poll_lock:
+        return await _poll_and_review(db)
+
+
+async def _poll_and_review(db: AsyncSession) -> Dict[str, Any]:
     """
     Main polling function:
     1. Fetch active PRs where REVIEWER_NAME is assigned
@@ -40,8 +59,6 @@ async def poll_and_review(db: AsyncSession) -> Dict[str, Any]:
 
     for repo in settings.repos_list:
         try:
-            # Ensure clean session state for each repo
-            await db.rollback()
             # Get PRs where reviewer is assigned
             prs = await client.get_prs_for_reviewer(repo, reviewer)
             summary["repos_polled"] += 1
@@ -50,6 +67,7 @@ async def poll_and_review(db: AsyncSession) -> Dict[str, Any]:
                 # Update poll state even if no PRs
                 state = await get_or_create_poll_state(db, repo)
                 state.last_poll_at = datetime.now(timezone.utc)
+                await db.commit()  # Commit state immediately
                 continue
 
             # Get previously seen PR IDs
@@ -77,7 +95,7 @@ async def poll_and_review(db: AsyncSession) -> Dict[str, Any]:
                             PullRequest.repo == repo,
                         )
                     )
-                    if not existing.scalar_one_or_none():
+                    if not existing.scalars().first():
                         pr = PullRequest(
                             azure_pr_id=pr_data["azure_pr_id"],
                             repo=repo,
@@ -107,41 +125,79 @@ async def poll_and_review(db: AsyncSession) -> Dict[str, Any]:
             if state.last_poll_at is None:
                 state.last_poll_at = datetime.now(timezone.utc)
                 state.last_seen_pr_ids = json.dumps(list(current_ids))
+                await db.commit()
                 logger.info(f"[{repo}] Synced poll_state with {len(current_ids)} existing PRs")
+                # This is a recovery/bootstrap path. Do not immediately classify
+                # every already-open PR as new using the stale, empty seen_ids.
+                continue
 
             # Filter to new PRs only
             new_prs = [pr for pr in prs if pr["azure_pr_id"] not in seen_ids]
+
+            # Additional dedup: skip PRs that already have a completed review recently
+            already_reviewed_ids = set()
+            if new_prs:
+                pr_ids_to_check = [pr["azure_pr_id"] for pr in new_prs]
+                existing_reviews = await db.execute(
+                    select(PullRequest.azure_pr_id)
+                    .join(Review, Review.pr_id == PullRequest.id)
+                    .where(
+                        PullRequest.repo == repo,
+                        PullRequest.azure_pr_id.in_(pr_ids_to_check),
+                        Review.status == "completed",
+                    )
+                    .distinct()
+                )
+                already_reviewed_ids = {row[0] for row in existing_reviews.fetchall()}
+                if already_reviewed_ids:
+                    logger.info(
+                        f"[{repo}] Skipping {len(already_reviewed_ids)} PRs already reviewed: "
+                        f"{already_reviewed_ids}"
+                    )
+                new_prs = [pr for pr in new_prs if pr["azure_pr_id"] not in already_reviewed_ids]
 
             if not new_prs:
                 # No new PRs — just update poll time
                 state.last_poll_at = datetime.now(timezone.utc)
                 state.last_seen_pr_ids = json.dumps(list(current_ids))
+                await db.commit()  # Commit state immediately
                 logger.info(f"[{repo}] No new PRs for reviewer {reviewer}")
                 continue
 
             summary["new_prs"] += len(new_prs)
             logger.info(f"[{repo}] Found {len(new_prs)} new PR(s) for {reviewer}")
 
+            completed_ids = set()
+
             # Process each new PR
             for pr_data in new_prs:
                 try:
-                    await _process_new_pr(db, client, repo, pr_data)
-                    summary["reviews_created"] += 1
+                    completed = await _process_new_pr(db, client, repo, pr_data)
+                    if completed:
+                        completed_ids.add(pr_data["azure_pr_id"])
+                        summary["reviews_created"] += 1
                 except Exception as e:
+                    await db.rollback()
                     error_msg = f"Error processing PR #{pr_data['azure_pr_id']} in {repo}: {e}"
                     logger.error(error_msg)
                     summary["errors"].append(error_msg)
 
-            # Update state with all current PR IDs (including old ones still active)
+            # Only completed (or previously completed) PRs are marked seen. A
+            # failed review stays eligible for a later retry instead of vanishing.
+            # A failed review may have rolled back this session, so re-read the
+            # persistent state before updating it.
+            state = await get_or_create_poll_state(db, repo)
             state.last_poll_at = datetime.now(timezone.utc)
-            state.last_seen_pr_ids = json.dumps(list(current_ids))
+            seen_for_next_poll = (seen_ids & current_ids) | already_reviewed_ids | completed_ids
+            state.last_seen_pr_ids = json.dumps(list(seen_for_next_poll))
+            await db.commit()  # Commit state immediately after processing
 
         except Exception as e:
+            await db.rollback()
             error_msg = f"Error polling {repo}: {e}"
             logger.error(error_msg)
             summary["errors"].append(error_msg)
 
-    await db.commit()
     return summary
 
 
@@ -149,28 +205,54 @@ async def _process_new_pr(
     db: AsyncSession, client: AzureDevOpsClient, repo: str, pr_data: Dict[str, Any],
     existing_pr: PullRequest = None,
 ):
+    """Serialize review creation for one Azure DevOps PR in this process."""
+    key = f"{repo}:{pr_data['azure_pr_id']}"
+    lock = _review_locks.setdefault(key, asyncio.Lock())
+    if lock.locked():
+        logger.warning("Review already running for %s; skipping duplicate request", key)
+        return False
+
+    async with lock:
+        return await _process_new_pr_unlocked(db, client, repo, pr_data, existing_pr)
+
+
+async def _process_new_pr_unlocked(
+    db: AsyncSession, client: AzureDevOpsClient, repo: str, pr_data: Dict[str, Any],
+    existing_pr: PullRequest = None,
+):
     """Process a single new PR: create PR record, fetch files, scan, create review."""
-    # Use existing PR record or create new one
+    # Use existing PR record or create new one (with dedup check)
     if existing_pr:
         pr = existing_pr
     else:
-        pr = PullRequest(
-        azure_pr_id=pr_data["azure_pr_id"],
-        repo=repo,
-        title=pr_data["title"],
-        description=pr_data.get("description", ""),
-        author=pr_data["author"],
-        author_email=pr_data.get("author_email", ""),
-        source_branch=pr_data["source_branch"],
-        target_branch=pr_data["target_branch"],
-        status=pr_data.get("status", "active"),
-        is_reviewer_required=pr_data.get("is_reviewer_required", "no"),
-        reviewers_json=pr_data.get("reviewers_json", "[]"),
-        url=pr_data["url"],
-        azure_created_at=_parse_date(pr_data.get("azure_created_at")),
-    )
-    db.add(pr)
-    await db.flush()
+        # Check if PR record already exists to avoid duplicates
+        result = await db.execute(
+            select(PullRequest).where(
+                PullRequest.azure_pr_id == pr_data["azure_pr_id"],
+                PullRequest.repo == repo,
+            )
+        )
+        # Legacy databases may already contain duplicate records. Prefer the
+        # first one while the database unique migration is being rolled out.
+        pr = result.scalars().first()
+        if not pr:
+            pr = PullRequest(
+                azure_pr_id=pr_data["azure_pr_id"],
+                repo=repo,
+                title=pr_data["title"],
+                description=pr_data.get("description", ""),
+                author=pr_data["author"],
+                author_email=pr_data.get("author_email", ""),
+                source_branch=pr_data["source_branch"],
+                target_branch=pr_data["target_branch"],
+                status=pr_data.get("status", "active"),
+                is_reviewer_required=pr_data.get("is_reviewer_required", "no"),
+                reviewers_json=pr_data.get("reviewers_json", "[]"),
+                url=pr_data["url"],
+                azure_created_at=_parse_date(pr_data.get("azure_created_at")),
+            )
+            db.add(pr)
+            await db.flush()
 
     # Create review record (pending)
     review = Review(
@@ -187,7 +269,11 @@ async def _process_new_pr(
         review.status = "failed"
         review.summary = "No iterations found for this PR"
         await db.commit()
-        return
+        return False
+
+    review.azure_iteration_id = iter_id
+    review.source_commit_id = source_sha
+    review.target_commit_id = target_sha
 
     changes = await client.get_pr_changes(repo, pr_data["azure_pr_id"], iter_id)
     if not changes:
@@ -197,7 +283,7 @@ async def _process_new_pr(
         review.completed_at = datetime.now(timezone.utc)
         review.duration_seconds = 0
         await db.commit()
-        return
+        return True
 
     # Fetch all files in parallel
     source_branch = pr_data["source_branch"]
@@ -227,7 +313,19 @@ async def _process_new_pr(
     review.raw_diff = "\n".join(all_diffs)
 
     # Security scan (grep patterns + semgrep)
-    security_findings = run_security_scan(files_content)
+    raw_security_findings = run_security_scan(files_content)
+    security_findings = [
+        finding
+        for finding in raw_security_findings
+        if finding.line in changed_lines.get(finding.file, set())
+    ]
+    skipped_unchanged = len(raw_security_findings) - len(security_findings)
+    if skipped_unchanged:
+        logger.info(
+            "Ignored %s security finding(s) outside changed lines for PR #%s",
+            skipped_unchanged,
+            pr_data["azure_pr_id"],
+        )
     review.security_scan_json = json.dumps([
         {
             "file": f.file,
@@ -359,12 +457,12 @@ async def _process_new_pr(
     )
 
     # Auto-comment if enabled
-    await _maybe_auto_comment(db, repo, pr, review, security_findings)
+    await _maybe_auto_comment(db, repo, pr, review)
+    return True
 
 
 async def _maybe_auto_comment(
     db: AsyncSession, repo: str, pr: PullRequest, review: Review,
-    security_findings: list,
 ):
     """Post comments to Azure DevOps PR if auto-comment is enabled."""
     from models import AppConfig
@@ -421,6 +519,7 @@ async def _maybe_auto_comment(
         findings=findings_data,
         scores=scores,
         duration_seconds=review.duration_seconds or 0,
+        iteration_id=review.azure_iteration_id or 0,
     )
 
     if stats["summary_posted"]:

@@ -18,6 +18,9 @@ class Review(Base):
     recommendation = Column(String(50))  # approve, request_changes, comment
     raw_diff = Column(Text)  # full diff text
     security_scan_json = Column(Text)  # semgrep + grep results JSON
+    azure_iteration_id = Column(Integer)  # Azure DevOps iteration reviewed
+    source_commit_id = Column(String(64))
+    target_commit_id = Column(String(64))
     started_at = Column(DateTime(timezone=True))
     completed_at = Column(DateTime(timezone=True))
     duration_seconds = Column(Integer)

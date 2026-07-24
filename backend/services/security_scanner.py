@@ -202,8 +202,14 @@ def scan_with_semgrep(files_content: Dict[str, str]) -> List[SecurityFinding]:
             if result.returncode == 0 and result.stdout:
                 data = json.loads(result.stdout)
                 for r in data.get("results", []):
+                    result_path = r.get("path", "")
+                    # Semgrep scans a temporary directory, but findings must
+                    # retain Azure DevOps repository paths for diff filtering
+                    # and inline comments.
+                    if result_path.startswith(tmpdir):
+                        result_path = "/" + os.path.relpath(result_path, tmpdir).replace(os.sep, "/")
                     findings.append(SecurityFinding(
-                        file=r.get("path", ""),
+                        file=result_path,
                         line=r.get("start", {}).get("line", 0),
                         pattern=r.get("check_id", "semgrep"),
                         severity=_semgrep_severity(r.get("extra", {}).get("severity", "WARNING")),
