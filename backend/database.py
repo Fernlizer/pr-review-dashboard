@@ -34,6 +34,35 @@ async def init_db():
         await conn.execute(text(
             "ALTER TABLE reviews ADD COLUMN IF NOT EXISTS target_commit_id VARCHAR(64)"
         ))
+        # These are additive only. Rows created before discussion tracking keep
+        # azure_thread_id NULL and are intentionally excluded from sync.
+        await conn.execute(text(
+            "ALTER TABLE findings ADD COLUMN IF NOT EXISTS azure_thread_id INTEGER"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE findings ADD COLUMN IF NOT EXISTS azure_root_comment_id INTEGER"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE findings ADD COLUMN IF NOT EXISTS discussion_status VARCHAR(50)"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE findings ADD COLUMN IF NOT EXISTS discussion_reason TEXT"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE findings ADD COLUMN IF NOT EXISTS discussion_json TEXT"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE findings ADD COLUMN IF NOT EXISTS last_synced_comment_id INTEGER"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE findings ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMP WITH TIME ZONE"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE findings ADD COLUMN IF NOT EXISTS last_bot_reply_at TIMESTAMP WITH TIME ZONE"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_findings_azure_thread_id ON findings (azure_thread_id)"
+        ))
 
         duplicate_count = (await conn.execute(text(
             "SELECT COUNT(*) FROM ("

@@ -190,6 +190,22 @@ class AzureDevOpsCommentClient:
             url, body, f"inline {file_path}:{line_number} on PR #{pr_id}"
         )
 
+    async def post_thread_reply(
+        self, repo: str, pr_id: int, thread_id: int, message: str
+    ) -> Optional[dict]:
+        """Add a reply to an existing Azure DevOps thread.
+
+        This deliberately does not update the pull-request reviewer vote or the
+        Azure thread status. The human reviewer remains the only approver and
+        closer of the PR.
+        """
+        url = (
+            f"{self.base_url}/{repo}/pullrequests/{pr_id}/threads/{thread_id}"
+            "/comments?api-version=7.1"
+        )
+        body = {"parentCommentId": 0, "content": message, "commentType": 1}
+        return await self._post_comment(url, body, f"reply to thread {thread_id} on PR #{pr_id}")
+
     async def _post_comment(self, url: str, body: dict, desc: str) -> Optional[dict]:
         """POST comment to Azure DevOps. Returns response or None on error."""
         async with httpx.AsyncClient(timeout=15) as client:
@@ -413,7 +429,13 @@ async def auto_comment_on_review(
 ) -> Dict[str, Any]:
     """Post all comments for a completed review (with dedup)."""
     client = AzureDevOpsCommentClient()
-    stats = {"summary_posted": False, "inline_posted": 0, "skipped": 0, "errors": []}
+    stats = {
+        "summary_posted": False,
+        "inline_posted": 0,
+        "skipped": 0,
+        "errors": [],
+        "posted_threads": {},
+    }
 
     high_count = sum(1 for f in findings if f.get("severity") == "HIGH")
     medium_count = sum(1 for f in findings if f.get("severity") == "MEDIUM")
@@ -504,6 +526,14 @@ async def auto_comment_on_review(
         )
         if result:
             stats["inline_posted"] += 1
+            finding_id = finding.get("id")
+            thread_id = result.get("id")
+            root_comment_id = (result.get("comments") or [{}])[0].get("id")
+            if finding_id and thread_id:
+                stats["posted_threads"][finding_id] = {
+                    "thread_id": thread_id,
+                    "root_comment_id": root_comment_id,
+                }
         else:
             stats["errors"].append(f"Failed to comment on {normalized_path}:{line_number}")
 

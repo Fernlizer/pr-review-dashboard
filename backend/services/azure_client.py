@@ -75,6 +75,7 @@ class AzureDevOpsClient:
             reviewers = pr.get("reviewers", [])
             is_reviewer = False
             is_required = False
+            reviewer_vote = 0
             for r in reviewers:
                 display = r.get("displayName", "")
                 unique = r.get("uniqueName", "")
@@ -82,6 +83,7 @@ class AzureDevOpsClient:
                     is_reviewer = True
                     if r.get("isRequired", False):
                         is_required = True
+                    reviewer_vote = int(r.get("vote", 0) or 0)
                     break
             if is_reviewer:
                 matched.append({
@@ -95,6 +97,10 @@ class AzureDevOpsClient:
                     "target_branch": pr.get("targetRefName", "").replace("refs/heads/", ""),
                     "status": pr.get("status", "active"),
                     "is_reviewer_required": "yes" if is_required else "no",
+                    # A positive Azure reviewer vote means the configured human
+                    # reviewer has already approved (including approval with
+                    # suggestions). Conversation automation must not touch it.
+                    "reviewer_vote": reviewer_vote,
                     "reviewers_json": json.dumps([
                         {"name": r.get("displayName", ""), "required": r.get("isRequired", False)}
                         for r in reviewers

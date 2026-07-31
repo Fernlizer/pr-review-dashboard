@@ -96,3 +96,26 @@ class InlineCommentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(client.post_inline_comment.await_args.kwargs["change_tracking_id"], 9)
         self.assertEqual(len(result["errors"]), 1)
         self.assertIn("missing.ts", result["errors"][0])
+
+    async def test_auto_comment_returns_new_thread_identity_for_finding(self):
+        client = mock.MagicMock()
+        client.get_existing_threads = AsyncMock(return_value=[])
+        client.get_change_tracking_ids = AsyncMock(return_value={"/src/known.ts": 9})
+        client.post_general_comment = AsyncMock(return_value={"id": 1})
+        client.post_inline_comment = AsyncMock(return_value={"id": 44, "comments": [{"id": 45}]})
+
+        with patch("services.auto_comment.AzureDevOpsCommentClient", return_value=client), patch(
+            "asyncio.sleep", new=AsyncMock()
+        ):
+            result = await auto_comment_on_review(
+                repo="purchase",
+                pr_id=123,
+                title="test",
+                recommendation="comment",
+                findings=[{"id": 7, "severity": "HIGH", "file_path": "/src/known.ts", "line_number": 10}],
+                scores={},
+                duration_seconds=1,
+                iteration_id=6,
+            )
+
+        self.assertEqual(result["posted_threads"], {7: {"thread_id": 44, "root_comment_id": 45}})

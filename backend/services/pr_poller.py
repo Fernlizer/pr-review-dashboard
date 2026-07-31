@@ -637,6 +637,7 @@ async def _maybe_auto_comment(
     # Build findings data for comment
     findings_data = [
         {
+            "id": f.id,
             "severity": f.severity,
             "category": f.category,
             "owasp_tag": f.owasp_tag,
@@ -676,6 +677,20 @@ async def _maybe_auto_comment(
     if stats["errors"]:
         for err in stats["errors"]:
             logger.error(f"  ❌ {err}")
+
+    # Store Azure identities only for newly created comments. Existing data is
+    # never backfilled, which keeps the later conversation sync strictly scoped
+    # to new PR-review work.
+    for finding in review_with_findings.findings:
+        posted = stats["posted_threads"].get(finding.id)
+        if not posted:
+            continue
+        finding.azure_thread_id = posted["thread_id"]
+        finding.azure_root_comment_id = posted.get("root_comment_id")
+        finding.last_synced_comment_id = posted.get("root_comment_id")
+        finding.discussion_status = "awaiting_author"
+    if stats["posted_threads"]:
+        await db.commit()
 
 
 def _extract_changed_lines(old_content: str, new_content: str) -> set:

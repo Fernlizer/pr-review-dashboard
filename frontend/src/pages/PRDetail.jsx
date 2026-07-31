@@ -86,6 +86,11 @@ function FindingCard({ finding, selected, onSelect }) {
             </span>
             <span className="mono" style={{ color: 'var(--color-ink-4)', fontSize: 'var(--text-xs)' }}>{finding.category}</span>
             {finding.owasp_tag && <span className="mono" style={{ color: 'var(--color-ink-4)', fontSize: 'var(--text-xs)' }}>{finding.owasp_tag}</span>}
+            {finding.discussion_status && (
+              <span className="mono" style={{ color: 'var(--color-accent)', background: 'var(--color-accent-bg)', borderRadius: 'var(--radius-full)', padding: '0.35rem 0.65rem', fontSize: 'var(--text-xs)', fontWeight: 800 }}>
+                discussion: {finding.discussion_status.replaceAll('_', ' ')}
+              </span>
+            )}
           </div>
           <p style={{ marginTop: 'var(--space-sm)', color: 'var(--color-ink)', lineHeight: 1.65 }}>{finding.description}</p>
           <div className="panel" style={{ marginTop: 'var(--space-sm)', padding: 'var(--space-sm)', borderRadius: 'var(--radius-md)', boxShadow: 'none' }}>
@@ -102,6 +107,12 @@ function FindingCard({ finding, selected, onSelect }) {
             <div style={{ display: 'flex', gap: 'var(--space-xs)', marginTop: 'var(--space-sm)', color: 'var(--color-success)' }}>
               <Wrench className="w-4 h-4 flex-shrink-0" />
               <p style={{ color: 'var(--color-ink-2)', lineHeight: 1.6 }}>{finding.fix_suggestion}</p>
+            </div>
+          )}
+          {finding.discussion_reason && (
+            <div className="panel" style={{ marginTop: 'var(--space-sm)', padding: 'var(--space-sm)', borderRadius: 'var(--radius-md)', boxShadow: 'none' }}>
+              <p className="mono" style={{ color: 'var(--color-accent)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>AI discussion summary — human decision required</p>
+              <p style={{ marginTop: 'var(--space-2xs)', color: 'var(--color-ink-2)', lineHeight: 1.6 }}>{finding.discussion_reason}</p>
             </div>
           )}
         </div>

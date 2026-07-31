@@ -204,9 +204,12 @@ async def review_pr_with_llm(
     return filtered
 
 
-async def _call_llm(prompt: str) -> Optional[str]:
+async def _call_llm(
+    prompt: str,
+    system_message: str = "คุณเป็น senior code reviewer ตอบเป็น JSON array เท่านั้น comment เฉพาะบรรทัดที่มี [NEW] หรือ [CHANGED] เท่านั้น",
+) -> Optional[str]:
     for provider in PROVIDERS:
-        result = await _try_provider(provider, prompt)
+        result = await _try_provider(provider, prompt, system_message)
         if result:
             return result
         logger.warning(f"Provider {provider['name']} failed, trying next...")
@@ -214,7 +217,7 @@ async def _call_llm(prompt: str) -> Optional[str]:
     return None
 
 
-async def _try_provider(provider: dict, prompt: str) -> Optional[str]:
+async def _try_provider(provider: dict, prompt: str, system_message: str) -> Optional[str]:
     url = f"{provider['base_url']}/chat/completions"
     headers = {
         "Authorization": f"Bearer {provider['api_key']}",
@@ -225,7 +228,7 @@ async def _try_provider(provider: dict, prompt: str) -> Optional[str]:
         "messages": [
             {
                 "role": "system",
-                "content": "คุณเป็น senior code reviewer ตอบเป็น JSON array เท่านั้น comment เฉพาะบรรทัดที่มี [NEW] หรือ [CHANGED] เท่านั้น",
+                "content": system_message,
             },
             {"role": "user", "content": prompt},
         ],

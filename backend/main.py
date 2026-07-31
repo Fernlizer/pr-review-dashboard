@@ -11,6 +11,7 @@ from config import settings
 from database import init_db, async_session
 from routers.api import router as api_router
 from services.pr_poller import poll_and_review
+from services.comment_discussion import sync_comment_discussions
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,6 +41,16 @@ async def scheduled_poll():
             logger.error(f"Poll failed: {e}")
 
 
+async def scheduled_discussion_sync():
+    """Safely sync new replies without altering the established review poller."""
+    async with async_session() as db:
+        try:
+            result = await sync_comment_discussions(db)
+            logger.info("Discussion sync: %(tracked)s tracked, %(replies)s replied, %(skipped_approved)s approved skipped", result)
+        except Exception:
+            logger.exception("Discussion sync failed")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -52,6 +63,13 @@ async def lifespan(app: FastAPI):
         "interval",
         minutes=settings.POLL_INTERVAL_MINUTES,
         id="pr_poller",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        scheduled_discussion_sync,
+        "interval",
+        minutes=settings.POLL_INTERVAL_MINUTES,
+        id="discussion_sync",
         replace_existing=True,
     )
     scheduler.start()

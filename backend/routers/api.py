@@ -124,6 +124,9 @@ async def get_pr(pr_id: int, db: AsyncSession = Depends(get_db)):
                         "code_snippet": f.code_snippet,
                         "fix_suggestion": f.fix_suggestion,
                         "is_automated": f.is_automated,
+                        "azure_thread_id": f.azure_thread_id,
+                        "discussion_status": f.discussion_status,
+                        "discussion_reason": f.discussion_reason,
                     }
                     for f in rv.findings
                 ],
@@ -216,6 +219,9 @@ async def get_review(review_id: int, db: AsyncSession = Depends(get_db)):
                 "code_snippet": f.code_snippet,
                 "fix_suggestion": f.fix_suggestion,
                 "is_automated": f.is_automated,
+                "azure_thread_id": f.azure_thread_id,
+                "discussion_status": f.discussion_status,
+                "discussion_reason": f.discussion_reason,
             }
             for f in review.findings
         ],
@@ -755,9 +761,15 @@ async def comment_selected_findings(
         if result:
             posted += 1
             existing_keys.add(dedup_key)
+            finding.azure_thread_id = result.get("id")
+            finding.azure_root_comment_id = (result.get("comments") or [{}])[0].get("id")
+            finding.last_synced_comment_id = finding.azure_root_comment_id
+            finding.discussion_status = "awaiting_author"
         else:
             errors.append(f"Failed: {file_path}:{finding.line_number}")
 
+    if posted:
+        await db.commit()
     return CommentSelectedResponse(posted=posted, skipped=skipped, errors=errors)
 
 
