@@ -632,9 +632,39 @@ Use that key as `HERMES_API_KEY` in this application's private `.env`; never com
 See `.env.example` for the application settings. Recreate the backend after changing them.
 
 The profile has no tool access: it reviews the supplied code without running shell
-commands, modifying files, or independently commenting on Azure DevOps. Skills are
-not installed or loaded by this integration. Existing scanner results and changed-line
+commands, modifying files, or independently commenting on Azure DevOps. Dashboard
+skills are loaded explicitly for each task (see below). Existing scanner results and changed-line
 filtering remain in place. Hermes timeouts, authentication errors, and invalid review
 responses fail the review for retry rather than producing a clean/approve result.
 
 Hermes reference: https://hermes-agent.nousresearch.com/docs/reference/cli-commands
+
+
+### Fixed Hermes dashboard skill workflow
+
+The source of truth is `backend/hermes_skills/`. Install the same files into the
+Hermes profile with `python3 scripts/install_hermes_skills.py` (or pass
+`--hermes-home /path/to/profile`). This only copies dashboard skills, not secrets.
+
+Every Hermes API request explicitly includes the trusted `source=pr-review-dashboard`,
+workflow version, task, and full content of the selected skills in the system message.
+This does not depend on Hermes choosing a skill, tools, or CLI auto-load settings:
+
+| Task | Required skills in order | Original response |
+| --- | --- | --- |
+| review | pr-dashboard → pr-dashboard-review → pr-dashboard-verify | Finding JSON array |
+| discussion | pr-dashboard → pr-dashboard-discussion → pr-dashboard-verify | decision/reason/reply/confidence JSON object |
+
+These are dashboard-specific skills implementing the existing review and comment
+patterns; external audit skills are not installed or implicitly selected. PR code and
+thread replies cannot choose a task or skill. Missing skills or invalid output fail
+closed. Logs show the task, loaded skill names and a contract digest without source
+code or credentials. Skill files are packaged with the backend Docker image, so rebuild
+and recreate backend after changing them; rerun the installer to sync the Hermes copy.
+
+Hermes supplies finding/reply content only. The existing dashboard code still filters
+changed lines, merges/deduplicates scanner findings, formats summary and inline comments,
+checks the reviewed iteration and changeTrackingId, and posts only through existing
+settings/actions. Automatic inline comments remain HIGH/MEDIUM only. Discussion replies
+keep their existing human-review prefix and skip approved PRs. No PR vote or Azure
+thread-resolution action is added.

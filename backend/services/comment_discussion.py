@@ -20,6 +20,7 @@ from models import Finding, PullRequest, Review
 from services.auto_comment import AzureDevOpsCommentClient
 from services.azure_client import AzureDevOpsClient
 from services.llm_reviewer import _call_llm
+from services.hermes_workflow import parse_discussion_response
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,8 @@ Finding เดิม:
 
 
 def _parse_assessment(raw: Optional[str]) -> Optional[dict]:
+    if settings.LLM_BACKEND == "hermes":
+        return parse_discussion_response(raw)
     if not raw:
         return None
     match = re.search(r"\{.*\}", raw, re.DOTALL)
@@ -184,6 +187,7 @@ async def sync_comment_discussions(db: AsyncSession) -> dict[str, int]:
                 "ตอบ JSON object เท่านั้นสำหรับการสรุป Azure DevOps discussion "
                 "ห้าม approve PR ห้ามเปลี่ยน reviewer vote และห้ามปิด Azure thread"
             ),
+            task="discussion",
         ))
         if not assessment:
             logger.warning("Discussion assessment unavailable for finding %s; retrying later", finding.id)

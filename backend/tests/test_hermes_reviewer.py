@@ -68,7 +68,8 @@ class HermesReviewerTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_findings_remain_limited_to_changed_lines(self):
         items = [{"severity": "medium", "file_path": "/example.ts", "line_number": line,
-                  "description": "empty input crashes"} for line in [2, 8]]
+                  "description": "empty input crashes", "category": "BUG", "function_name": "example",
+                  "code_snippet": "return users[0].name;", "fix_suggestion": "Check for empty input.", "owasp_tag": None} for line in [2, 8]]
         with patch.object(reviewer, "_call_llm", new=AsyncMock(return_value=json.dumps(items))):
             findings = await reviewer.review_pr_with_llm("test", "author", "feature", "main", [], {"/example.ts": {2}})
         self.assertEqual([f.line_number for f in findings], [2])
