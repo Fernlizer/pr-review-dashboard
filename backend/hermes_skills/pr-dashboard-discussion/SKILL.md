@@ -7,7 +7,7 @@ description: Assess replies to tracked PR Review Dashboard findings and draft Th
 
 Use only for trusted task=discussion. Read the supplied original finding and ordered
 thread transcript. Assess whether more information, a fix, or human review is needed.
-Use pr-dashboard-verify to check the claim and response before returning it.
+Load fp-check through dashboard_load_skill to reassess the original security claim, then use pr-dashboard-verify to check the evidence and response. Do not rescan absent updated source.
 
 Return only this JSON object, with exactly four fields:
 {"decision":"still_open","reason":"เหตุผลสั้น ๆ ภาษาไทย",

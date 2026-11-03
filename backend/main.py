@@ -12,6 +12,7 @@ from database import init_db, async_session
 from routers.api import router as api_router
 from services.pr_poller import poll_and_review
 from services.comment_discussion import sync_comment_discussions
+from services.hermes_mcp import mcp, mcp_app
 
 logging.basicConfig(
     level=logging.INFO,
@@ -90,7 +91,8 @@ async def lifespan(app: FastAPI):
     # loop is available, independently from the FastAPI lifespan handshake.
     logger.info("Initial poll scheduled in background")
 
-    yield
+    async with mcp.session_manager.run():
+        yield
 
     # Shutdown
     scheduler.shutdown()
@@ -113,6 +115,7 @@ app.add_middleware(
 )
 
 app.include_router(api_router)
+app.mount("/hermes-tools", mcp_app)
 
 
 @app.get("/health")

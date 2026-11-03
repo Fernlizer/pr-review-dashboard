@@ -1,0 +1,3 @@
+title = "Dashboard trusted Gitleaks defaults"
+[extend]
+useDefault = true

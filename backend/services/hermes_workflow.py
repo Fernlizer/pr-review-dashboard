@@ -6,7 +6,7 @@ import math
 from pathlib import Path
 
 SKILL_ROOT = Path(__file__).resolve().parents[1] / "hermes_skills"
-WORKFLOW_VERSION = "1"
+WORKFLOW_VERSION = "2"
 TASK_SKILLS = {
     "review": ("pr-dashboard", "pr-dashboard-review", "pr-dashboard-verify"),
     "discussion": ("pr-dashboard", "pr-dashboard-discussion", "pr-dashboard-verify"),

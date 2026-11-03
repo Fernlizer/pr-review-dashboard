@@ -16,7 +16,9 @@ class Settings(BaseSettings):
     HERMES_BASE_URL: str = "http://host.docker.internal:8642/p/pr-review/v1"
     HERMES_API_KEY: str = ""
     HERMES_MODEL: str = "pr-review"
-    HERMES_TIMEOUT_SECONDS: int = Field(default=150, ge=1, le=600)
+    HERMES_TIMEOUT_SECONDS: int = Field(default=450, ge=1, le=600)
+    HERMES_TOOLS_KEY: str = ""
+    HERMES_REQUIRE_TOOLS: bool = True
 
     @property
     def repos_list(self) -> List[str]:

@@ -13,7 +13,7 @@ class HermesReviewerTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.config = patch.multiple(settings, LLM_BACKEND="hermes",
             HERMES_BASE_URL="http://hermes.test/p/pr-review/v1/",
-            HERMES_API_KEY="test-key", HERMES_MODEL="pr-review")
+            HERMES_API_KEY="test-key", HERMES_MODEL="pr-review", HERMES_REQUIRE_TOOLS=False)
         self.config.start()
         self.addCleanup(self.config.stop)
 

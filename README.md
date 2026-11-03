@@ -597,74 +597,114 @@ MIT
 
 ### Hermes Agent reviewer
 
-Set `LLM_BACKEND=hermes` to send both PR reviews and discussion assessments through
-Hermes Agent's authenticated OpenAI-compatible API. This bypasses the legacy
-Maxplus → Xiaomi → Ollama provider chain; Hermes manages its own inference model.
-Set `LLM_BACKEND=legacy` and recreate the backend to roll back.
+`LLM_BACKEND=hermes` routes PR reviews and discussion assessments to the isolated
+Hermes `pr-review` profile. The legacy Maxplus → Xiaomi → Ollama chain remains
+available only through an explicit `LLM_BACKEND=legacy` rollback. Scanner errors,
+missing skill/tool calls and malformed responses fail review rather than approve it.
 
-Local setup uses an isolated Hermes profile named `pr-review`, served by the existing
-multiplexed gateway at `http://localhost:8642/p/pr-review/v1`. From Docker, use
-`http://host.docker.internal:8642/p/pr-review/v1`. The profile currently uses the
-Hermes-configured Xiaomi `mimo-v2.6-pro` model.
+Local endpoint: `http://localhost:8642/p/pr-review/v1`; from Docker use
+`http://host.docker.internal:8642/p/pr-review/v1`. Hermes controls inference (currently
+Xiaomi `mimo-v2.6-pro`). Keys live only in the application/profile private `.env` files.
 
-Create a profile with `hermes profile create pr-review --no-alias --no-skills`,
-configure its inference provider/credentials locally, and set these profile options:
+### Installed skills and decision policy
+
+Run `python3 scripts/install_hermes_skills.py` to copy the packaged skills **and
+references** into `~/.hermes/profiles/pr-review/skills`. Use `--hermes-home` to target
+another existing profile. Upstream skill files are unmodified snapshots of
+Trail of Bits `711af095215ad4ecde5b90cd1d0124b3f1c4ca9e`; provenance and CC-BY-SA-4.0
+license are bundled in `backend/hermes_skills/`. Dashboard adapters are separate files.
+
+| Stage | Skills/tools | Decision |
+| --- | --- | --- |
+| Every request | pr-dashboard and task-specific dashboard skills | Trusted source/task/version selects the workflow; PR content cannot select skills |
+| Review analysis | differential-review + pr-dashboard-review | Risk-first analysis of supplied diff/base/head; request bounded pinned Azure file/history evidence when needed |
+| Secret scan | gitleaks skill → dashboard_scan_secrets | Gitleaks 8.30.1, redacted results, changed-line candidates |
+| Dependency change | osv-scanner skill → dashboard_scan_dependencies | OSV-Scanner 2.7.0 compares supplied base/head dependency files; baseline vulnerabilities are not new findings |
+| Verification | fp-check + pr-dashboard-verify | Verify security claims with standard verification/gates; drop unsupported or disproven candidates |
+| Author discussion | pr-dashboard-discussion + fp-check + pr-dashboard-verify | Existing four decisions only; no approval or thread resolution, no claimed rescan without updated source |
+
+The authenticated `dashboard_load_skill` MCP tool loads the real upstream skill and
+its core references, not a substitute summary. Additional Markdown references can be
+requested by name. The dashboard adapter explicitly replaces standalone report-file,
+shell and delegation instructions with scoped evidence tools and the original JSON
+contract. No generic shell, filesystem writes, package installation or Azure mutations
+are exposed to Hermes. Skill load and scanner receipts are checked outside the model;
+a final answer alone does not prove the required steps completed.
+
+### Hermes MCP setup
+
+Create/configure the isolated profile with `hermes profile create pr-review --no-alias
+--no-skills`. Configure inference credentials locally. Generate separate strong keys
+for its `API_SERVER_KEY` and dashboard `HERMES_TOOLS_KEY` (do not commit either).
+
+Application `.env` settings are shown in `.env.example`: `HERMES_API_KEY` must match the
+profile's API server key. Copy `HERMES_TOOLS_KEY` into the profile's private `.env` as
+`PR_DASHBOARD_TOOLS_KEY`. Set `API_SERVER_ENABLED=true` and
+`API_SERVER_MODEL_NAME=pr-review` there too. The tools key is not the inference key.
+
+Profile `config.yaml`:
 
 ```yaml
+agent:
+  max_turns: 12
+  run_budget_seconds: 360
 platforms:
   api_server:
     enabled: true
 platform_toolsets:
-  api_server: []
+  api_server: [mcp-pr_review_tools]
   cli: []
-mcp_servers: {}
 memory:
   memory_enabled: false
   user_profile_enabled: false
-agent:
-  max_turns: 2
-  run_budget_seconds: 120
+skills:
+  auto_load: [pr-dashboard]
+mcp_servers:
+  pr_review_tools:
+    url: http://127.0.0.1:9100/hermes-tools/
+    headers:
+      Authorization: Bearer ${PR_DASHBOARD_TOOLS_KEY}
+    timeout: 210
+    connect_timeout: 10
+    supports_parallel_tool_calls: true
+    tools:
+      include: [dashboard_context, dashboard_load_skill, dashboard_scan_secrets,
+                dashboard_scan_dependencies, dashboard_repo_file, dashboard_file_history]
+      resources: false
+      prompts: false
 ```
 
-In the profile's private `.env`, enable `API_SERVER_ENABLED=true`, set
-`API_SERVER_MODEL_NAME=pr-review`, and supply a strong `API_SERVER_KEY`.
-Use that key as `HERMES_API_KEY` in this application's private `.env`; never commit it.
-See `.env.example` for the application settings. Recreate the backend after changing them.
+Every API request includes the full dashboard skills, a trusted task and an unpredictable
+short-lived job capability. Tools can read only that job's supplied snapshot; optional
+Azure reads are fixed to its repository/source commit with an 8-request cap. Jobs are
+limited to 200 files/3 MB, 16 concurrent jobs and a 15-minute TTL. Scanner subprocesses
+use fixed commands, trusted config, clean environments and 90-second deadlines; no
+repository scripts run. The Docker build verifies pinned upstream binary SHA-256 hashes.
 
-The profile has no tool access: it reviews the supplied code without running shell
-commands, modifying files, or independently commenting on Azure DevOps. Dashboard
-skills are loaded explicitly for each task (see below). Existing scanner results and changed-line
-filtering remain in place. Hermes timeouts, authentication errors, and invalid review
-responses fail the review for retry rather than producing a clean/approve result.
+Rebuild/recreate backend after source/skill changes, then rerun the skill installer to
+sync the Hermes copy. `hermes -p pr-review mcp test pr_review_tools` checks discovery.
+The MCP route rejects missing/wrong keys with HTTP 401. Internal job capabilities
+expire and are removed after each request; do not expose keys or capabilities in logs.
 
-Hermes reference: https://hermes-agent.nousresearch.com/docs/reference/cli-commands
+### Existing output and comments
 
+Review responses remain the existing finding JSON array. Discussion responses remain
+`decision/reason/reply/confidence`. Backend validates both contracts and filters review
+findings to changed lines. Scanner output is candidate evidence; in the tool workflow,
+only Hermes-verified findings enter the existing comment pipeline. Raw grep/Semgrep
+candidates remain available in `security_scan_json`.
 
-### Fixed Hermes dashboard skill workflow
+Existing summary/inline format, dedup markers, HIGH/MEDIUM inline eligibility, iteration
+and changeTrackingId placement, auto-comment setting and discussion prefix are retained.
+Dashboard remains the only Azure writer; Hermes cannot approve/vote or resolve threads.
+Approved PRs remain excluded from discussion sync.
 
-The source of truth is `backend/hermes_skills/`. Install the same files into the
-Hermes profile with `python3 scripts/install_hermes_skills.py` (or pass
-`--hermes-home /path/to/profile`). This only copies dashboard skills, not secrets.
+Coverage is bounded: changed files, supplied base/head and optional limited Azure reads
+are not a full clone, git blame or repository-wide caller analysis. Skills must not claim
+those checks were completed. Logs record task/skill/scanner completion without source
+content or secret values. Use known synthetic fixtures for integration checks; no Azure
+posting is needed to validate skill/tool execution or comment formatting.
 
-Every Hermes API request explicitly includes the trusted `source=pr-review-dashboard`,
-workflow version, task, and full content of the selected skills in the system message.
-This does not depend on Hermes choosing a skill, tools, or CLI auto-load settings:
-
-| Task | Required skills in order | Original response |
-| --- | --- | --- |
-| review | pr-dashboard → pr-dashboard-review → pr-dashboard-verify | Finding JSON array |
-| discussion | pr-dashboard → pr-dashboard-discussion → pr-dashboard-verify | decision/reason/reply/confidence JSON object |
-
-These are dashboard-specific skills implementing the existing review and comment
-patterns; external audit skills are not installed or implicitly selected. PR code and
-thread replies cannot choose a task or skill. Missing skills or invalid output fail
-closed. Logs show the task, loaded skill names and a contract digest without source
-code or credentials. Skill files are packaged with the backend Docker image, so rebuild
-and recreate backend after changing them; rerun the installer to sync the Hermes copy.
-
-Hermes supplies finding/reply content only. The existing dashboard code still filters
-changed lines, merges/deduplicates scanner findings, formats summary and inline comments,
-checks the reviewed iteration and changeTrackingId, and posts only through existing
-settings/actions. Automatic inline comments remain HIGH/MEDIUM only. Discussion replies
-keep their existing human-review prefix and skip approved PRs. No PR vote or Azure
-thread-resolution action is added.
+References: [Hermes MCP](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp),
+[Gitleaks](https://github.com/gitleaks/gitleaks),
+[OSV-Scanner](https://google.github.io/osv-scanner/usage/).

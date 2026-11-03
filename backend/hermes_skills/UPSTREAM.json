@@ -1,0 +1,7 @@
+{
+  "repository": "https://github.com/trailofbits/skills",
+  "commit": "711af095215ad4ecde5b90cd1d0124b3f1c4ca9e",
+  "license": "CC-BY-SA-4.0",
+  "skills": ["fp-check", "differential-review"],
+  "modifications": "None; dashboard adapter instructions live in pr-dashboard/SKILL.md."
+}

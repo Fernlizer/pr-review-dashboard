@@ -18,7 +18,7 @@ Apply the existing review checks:
 - Tests: identify missing coverage for a concrete changed behavior/edge case when the
   supplied evidence supports it. Do not claim tests are globally absent from a partial input.
 
-Apply pr-dashboard-verify before returning candidates. Do not add style preferences,
+Use the loaded differential-review methodology and applicable scanner evidence, then fp-check for suspected security bugs and pr-dashboard-verify before returning candidates. Do not add style preferences,
 new policy categories, hypothetical architecture rewrites, or findings on unchanged code.
 Do not claim cross-file/caller/history analysis unless the relevant evidence was supplied.
 

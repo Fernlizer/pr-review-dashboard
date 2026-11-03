@@ -442,7 +442,9 @@ async def _complete_review(
     # Fetch all files in parallel
     source_branch = pr_data["source_branch"]
     target_branch = pr_data["target_branch"]
-    fetched_files = await client.fetch_files_parallel(repo, changes, source_branch, target_branch)
+    fetched_files = await client.fetch_files_parallel(
+        repo, changes, source_branch, target_branch, source_commit=source_sha, target_commit=target_sha
+    )
 
     # Build diff text + track changed lines
     all_diffs = []
@@ -467,7 +469,7 @@ async def _complete_review(
     review.raw_diff = "\n".join(all_diffs)
 
     # Security scan (grep patterns + semgrep)
-    raw_security_findings = run_security_scan(files_content)
+    raw_security_findings = await asyncio.to_thread(run_security_scan, files_content)
     security_findings = [
         finding
         for finding in raw_security_findings
@@ -512,11 +514,14 @@ async def _complete_review(
                     "change_type": str(ff.change_type),
                     "src_content": str(ff.src_content or ""),
                     "tgt_content": str(ff.tgt_content or ""),
+                    "diff": str(ff.diff or ""),
                 }
                 for ff in fetched_files
                 if ff.src_content
             ],
             changed_lines=changed_lines,
+            evidence={"repo": repo, "source_commit": source_sha, "target_commit": target_sha,
+                      "scanner_findings": json.loads(review.security_scan_json)},
         )
         logger.info(f"LLM review found {len(llm_findings)} findings (changed lines only)")
     except Exception as e:
@@ -524,6 +529,11 @@ async def _complete_review(
             raise RuntimeError("Hermes review failed; review must be retried") from e
         logger.error(f"LLM review failed (continuing with security scan only): {type(e).__name__}: {e}")
         llm_findings = []
+
+    # In the tool workflow, scanners propose evidence; only Hermes-verified findings
+    # may reach the existing comment pipeline. Keep raw candidates in scan JSON.
+    if settings.LLM_BACKEND == "hermes" and settings.HERMES_REQUIRE_TOOLS:
+        security_findings = []
 
     # Create Finding records — merge security scan + LLM findings
     high_count = 0

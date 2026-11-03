@@ -74,7 +74,7 @@ class WorkflowContractTests(unittest.TestCase):
 
 class WorkflowTransportTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        config = patch.multiple(settings, LLM_BACKEND="hermes", HERMES_API_KEY="test-key")
+        config = patch.multiple(settings, LLM_BACKEND="hermes", HERMES_API_KEY="test-key", HERMES_REQUIRE_TOOLS=False)
         config.start()
         self.addCleanup(config.stop)
 
@@ -87,7 +87,7 @@ class WorkflowTransportTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(llm_reviewer.httpx, "AsyncClient", return_value=client):
             self.assertEqual(await llm_reviewer._call_llm(prompt), "[]")
         messages = client.post.call_args.kwargs['json']['messages']
-        self.assertIn('source=pr-review-dashboard\nworkflow=1\ntask=review', messages[0]['content'])
+        self.assertIn('source=pr-review-dashboard\nworkflow=2\ntask=review', messages[0]['content'])
         self.assertNotIn('<dashboard_skill name="pr-dashboard-discussion">', messages[0]['content'])
         self.assertEqual(messages[1]['content'], prompt)
 

@@ -8,3 +8,5 @@ pydantic-settings==2.13.1
 python-dotenv==1.2.2
 greenlet==3.1.1
 semgrep==1.168.0
+
+mcp==1.23.3

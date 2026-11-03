@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 import logging
+from urllib.parse import urlencode
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
@@ -148,17 +149,13 @@ class AzureDevOpsClient:
         return data.get("changeEntries", [])
 
     async def fetch_file_content(
-        self, repo: str, path: str, branch: str
+        self, repo: str, path: str, branch: str, version_type: str = "branch"
     ) -> Optional[str]:
-        """Fetch file content from a specific branch."""
-        url = (
-            f"{self.repo_base}/{repo}/items"
-            f"?path={path}"
-            f"&versionDescriptor.version={branch}"
-            f"&versionDescriptor.versionType=branch"
-            f"&api-version=7.1-preview.1"
-            f"&includeContent=true"
-        )
+        """Fetch raw file content from an explicit branch or pinned commit."""
+        query = urlencode({"path": path, "versionDescriptor.version": branch,
+                           "versionDescriptor.versionType": version_type,
+                           "api-version": "7.1", "includeContent": "true"})
+        url = f"{self.repo_base}/{repo}/items?{query}"
         # Override Accept header to get raw text, not JSON wrapper
         raw_headers = {**self.headers, "Accept": "text/plain"}
         async with httpx.AsyncClient(timeout=30) as client:
@@ -177,7 +174,8 @@ class AzureDevOpsClient:
             return text
 
     async def fetch_files_parallel(
-        self, repo: str, files: List[dict], source_branch: str, target_branch: str
+        self, repo: str, files: List[dict], source_branch: str, target_branch: str,
+        source_commit: Optional[str] = None, target_commit: Optional[str] = None,
     ) -> List[FetchedFile]:
         """Fetch all file contents in parallel using ThreadPoolExecutor."""
         import difflib
@@ -191,14 +189,16 @@ class AzureDevOpsClient:
 
             try:
                 # Source (feature branch) — always fetch
-                src_task = self.fetch_file_content(repo, path, source_branch)
+                src_task = self.fetch_file_content(repo, path, source_commit or source_branch,
+                                                   version_type="commit" if source_commit else "branch")
 
                 if change_type == "add":
                     ff.src_content = await src_task
                     ff.tgt_content = None
                 else:
                     # Fetch both in parallel
-                    tgt_task = self.fetch_file_content(repo, path, target_branch)
+                    tgt_task = self.fetch_file_content(repo, path, target_commit or target_branch,
+                                                       version_type="commit" if target_commit else "branch")
                     ff.src_content, ff.tgt_content = await asyncio.gather(src_task, tgt_task)
 
                 # Generate diff

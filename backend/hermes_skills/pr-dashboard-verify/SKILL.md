@@ -5,7 +5,7 @@ description: Verify candidate findings or discussion assessments for PR Review D
 
 # Evidence and output verification
 
-For task=review, verify every candidate before including it:
+Load upstream fp-check through dashboard_load_skill. Apply its standard verification and gate reviews to suspected security findings. Keep these checks for all candidates:
 1. The issue is caused or exposed by the supplied change, at a supplied changed line.
 2. Describe the actual trigger, failing behavior, and concrete impact from visible evidence.
 3. Trace visible guards, validation, auth, defaults, or exception handling that may disprove it.
