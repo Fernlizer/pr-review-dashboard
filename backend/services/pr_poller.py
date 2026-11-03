@@ -520,6 +520,8 @@ async def _complete_review(
         )
         logger.info(f"LLM review found {len(llm_findings)} findings (changed lines only)")
     except Exception as e:
+        if settings.LLM_BACKEND == "hermes":
+            raise RuntimeError("Hermes review failed; review must be retried") from e
         logger.error(f"LLM review failed (continuing with security scan only): {type(e).__name__}: {e}")
         llm_findings = []
 

@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Literal
+from pydantic import Field
 
 
 class Settings(BaseSettings):
@@ -10,6 +11,12 @@ class Settings(BaseSettings):
     REVIEWER_NAME: str = "FERN"
     POLL_INTERVAL_MINUTES: int = 10
     REPOS: str = "purchase,usermgt,coop,backoffice"
+
+    LLM_BACKEND: Literal["legacy", "hermes"] = "legacy"
+    HERMES_BASE_URL: str = "http://host.docker.internal:8642/p/pr-review/v1"
+    HERMES_API_KEY: str = ""
+    HERMES_MODEL: str = "pr-review"
+    HERMES_TIMEOUT_SECONDS: int = Field(default=150, ge=1, le=600)
 
     @property
     def repos_list(self) -> List[str]:

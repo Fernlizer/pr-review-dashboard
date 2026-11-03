@@ -593,3 +593,48 @@ docker logs pr-review-backend 2>&1 | grep -E "Poll complete|Found|ERROR"
 ## License
 
 MIT
+
+
+### Hermes Agent reviewer
+
+Set `LLM_BACKEND=hermes` to send both PR reviews and discussion assessments through
+Hermes Agent's authenticated OpenAI-compatible API. This bypasses the legacy
+Maxplus → Xiaomi → Ollama provider chain; Hermes manages its own inference model.
+Set `LLM_BACKEND=legacy` and recreate the backend to roll back.
+
+Local setup uses an isolated Hermes profile named `pr-review`, served by the existing
+multiplexed gateway at `http://localhost:8642/p/pr-review/v1`. From Docker, use
+`http://host.docker.internal:8642/p/pr-review/v1`. The profile currently uses the
+Hermes-configured Xiaomi `mimo-v2.6-pro` model.
+
+Create a profile with `hermes profile create pr-review --no-alias --no-skills`,
+configure its inference provider/credentials locally, and set these profile options:
+
+```yaml
+platforms:
+  api_server:
+    enabled: true
+platform_toolsets:
+  api_server: []
+  cli: []
+mcp_servers: {}
+memory:
+  memory_enabled: false
+  user_profile_enabled: false
+agent:
+  max_turns: 2
+  run_budget_seconds: 120
+```
+
+In the profile's private `.env`, enable `API_SERVER_ENABLED=true`, set
+`API_SERVER_MODEL_NAME=pr-review`, and supply a strong `API_SERVER_KEY`.
+Use that key as `HERMES_API_KEY` in this application's private `.env`; never commit it.
+See `.env.example` for the application settings. Recreate the backend after changing them.
+
+The profile has no tool access: it reviews the supplied code without running shell
+commands, modifying files, or independently commenting on Azure DevOps. Skills are
+not installed or loaded by this integration. Existing scanner results and changed-line
+filtering remain in place. Hermes timeouts, authentication errors, and invalid review
+responses fail the review for retry rather than producing a clean/approve result.
+
+Hermes reference: https://hermes-agent.nousresearch.com/docs/reference/cli-commands
