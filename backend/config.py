@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     HERMES_TIMEOUT_SECONDS: int = Field(default=450, ge=1, le=600)
     HERMES_TOOLS_KEY: str = ""
     HERMES_REQUIRE_TOOLS: bool = True
+    HERMES_BATCH_WORKFLOW: bool = False
 
     @property
     def repos_list(self) -> List[str]:

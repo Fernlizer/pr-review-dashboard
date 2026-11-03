@@ -708,3 +708,77 @@ posting is needed to validate skill/tool execution or comment formatting.
 References: [Hermes MCP](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp),
 [Gitleaks](https://github.com/gitleaks/gitleaks),
 [OSV-Scanner](https://google.github.io/osv-scanner/usage/).
+
+
+### Optional batched Hermes workflow
+
+`HERMES_BATCH_WORKFLOW=true` selects `dashboard_prepare_review` for the first tool
+request. It returns the **same complete** context, upstream skill roots/core references
+and required scanner outputs as the individual tools. Required receipts, fp-check gates,
+scanner failure handling, response validation and the Azure comment pipeline are unchanged.
+Independent Gitleaks/OSV processes run concurrently; duplicate calls to one scanner
+coalesce. Failed scans never receive a success receipt.
+
+Related files can be requested together with `dashboard_repo_files` (up to 8 paths,
+at most 4 concurrent fetches, shared original 8-Azure-read budget). Supplied head snapshots
+and completed file reads are reused only within that immutable job/commit. Missing-file
+results may be reused; network errors are not cached. OSV results are not cached across
+jobs, so new work still consults the current vulnerability database.
+
+Add `dashboard_prepare_review` and `dashboard_repo_files` to the isolated profile's MCP
+`tools.include` list, then set the profile's inline MCP result budget to preserve full
+bundled results:
+
+```yaml
+tool_budget:
+  mcp_result_size_chars: 100000
+```
+
+Combined outputs are limited to 90,000 JSON characters to leave wrapper overhead under
+the existing 100,000-character generic Hermes cap. Larger preparation results explicitly
+fall back to the original tools and reset their model-read receipts. Large file batches
+instruct individual reads from the full same-job cache. No evidence is silently shortened
+by the new batching layer. Existing single-file/diff size limits still apply.
+
+Set `HERMES_BATCH_WORKFLOW=false` and recreate the backend to roll back tool ordering.
+The original individual tools remain available in either mode. No model, reasoning,
+timeout, scanner rule, severity, or comment-format change is required by this option.
+
+
+For large PRs in batch mode, the initial source excerpt prioritizes every changed line,
+then adds adjacent code fairly across files within the existing prompt budget. Small PRs
+retain full source. Explicit gap markers identify omitted source; full head/base snapshots
+and diffs remain available through scoped tools. If all changed lines cannot fit, the
+original renderer is used rather than silently dropping selected changes. Reviewers must
+read upstream context when an excerpt cannot establish a guard/dependency/data-flow claim.
+
+A running Hermes gateway may keep an old MCP tool schema even when `hermes mcp test`
+shows the updated server. Refresh **only** the isolated profile during an idle period and
+verify actual `dashboard_prepare_review` calls plus `preparation=bundle` receipts before
+measuring or enabling this option. Do not restart other profiles for this change.
+
+Frozen-snapshot shadow replays can be run inside the backend container with:
+
+```sh
+PYTHONPATH=/app python scripts/benchmark_hermes_batch.py \
+  --snapshot /tmp/private-snapshot.json --output /tmp/private-result.json --batch
+```
+
+The operator-provided fixture contains meta/files/changed_lines and must be kept private;
+the script only invokes the reviewer/scanners, not the DB review writer or Azure comment
+pipeline. Compare retained findings and execution mode as well as latency. A single LLM
+replay is not a p95 benchmark or proof of equal quality for all PRs.
+
+
+For this dedicated eight-tool profile, expose those existing schemas eagerly to avoid
+model turns spent searching/describing known MCP tools. This changes discovery only,
+not tool authorization or available capabilities:
+
+```yaml
+tools:
+  tool_search:
+    enabled: 'off'
+```
+
+Keep the MCP include allowlist and authentication intact. This setting is scoped to
+`pr-review`; other Hermes profiles retain their own discovery settings.

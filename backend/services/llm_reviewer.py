@@ -18,6 +18,7 @@ import httpx
 from config import settings
 from services.hermes_workflow import build_workflow_prompt, validate_review_response, parse_discussion_response
 from services import hermes_jobs
+from services.review_context import build_focused_context
 
 logger = logging.getLogger(__name__)
 
@@ -180,6 +181,10 @@ async def review_pr_with_llm(
         total_chars += len(section)
 
     code_content = "\n".join(code_parts)
+    if settings.LLM_BACKEND == "hermes" and settings.HERMES_REQUIRE_TOOLS and settings.HERMES_BATCH_WORKFLOW:
+        focused = build_focused_context(files, changed_lines)
+        if focused is not None:
+            code_content = focused
 
     prompt = REVIEW_PROMPT.safe_substitute(
         title=title,
@@ -240,7 +245,7 @@ async def _call_hermes(prompt: str, system_message: str, *, task: str = "review"
     try:
         workflow_prompt, skill_names, digest = build_workflow_prompt(task)
         if settings.HERMES_REQUIRE_TOOLS:
-            job_id = hermes_jobs.create_job(task, context)
+            job_id = hermes_jobs.create_job(task, context, batch=settings.HERMES_BATCH_WORKFLOW)
             workflow_prompt += hermes_jobs.job_instructions(job_id)
         async with httpx.AsyncClient(timeout=settings.HERMES_TIMEOUT_SECONDS) as client:
             logger.info("Hermes dashboard task=%s skills=%s contract=%s model=%s",
