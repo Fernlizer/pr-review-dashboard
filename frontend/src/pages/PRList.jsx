@@ -41,9 +41,30 @@ function ReviewBadge({ review }) {
 function PRList() {
   const [prs, setPrs] = useState([])
   const [total, setTotal] = useState(0)
+  const [repositories, setRepositories] = useState([])
+  const [repositoryError, setRepositoryError] = useState('')
   const [repo, setRepo] = useState('')
+  const [repositorySearch, setRepositorySearch] = useState('')
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const loadRepositories = async () => {
+      try {
+        const response = await fetch('/api/repositories', { signal: controller.signal })
+        if (!response.ok) throw new Error('Unable to load repositories')
+        const data = await response.json()
+        setRepositories(data.repositories || [])
+        setRepositoryError('')
+      } catch (error) {
+        if (error.name !== 'AbortError') setRepositoryError('Unable to refresh repositories. Retrying automatically.')
+      }
+    }
+    loadRepositories()
+    const timer = setInterval(loadRepositories, 60000)
+    return () => { controller.abort(); clearInterval(timer) }
+  }, [])
 
   const loadPrs = ({ quiet = false } = {}) => {
     if (!quiet) setLoading(true)
@@ -65,6 +86,11 @@ function PRList() {
     const timer = setInterval(() => loadPrs({ quiet: true }), 3000)
     return () => clearInterval(timer)
   }, [prs, repo, status])
+
+  const filteredRepositories = useMemo(() => {
+    const query = repositorySearch.trim().toLowerCase()
+    return repositories.filter(name => name.toLowerCase().includes(query))
+  }, [repositories, repositorySearch])
 
   const activeCount = useMemo(() => prs.filter(pr => pr.status === 'active').length, [prs])
   const runningCount = useMemo(() => prs.filter(pr => pr.latest_review?.status === 'running').length, [prs])
@@ -98,13 +124,28 @@ function PRList() {
             <Filter className="w-4 h-4" />
             <span className="mono" style={{ fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>controls</span>
           </div>
-          <select value={repo} onChange={e => setRepo(e.target.value)} style={selectStyle}>
+          <div className="flex items-center gap-xs" style={{ flexWrap: 'wrap' }}>
+            <label className="flex items-center gap-xs" style={{ ...selectStyle, padding: '0 var(--space-sm)' }}>
+              <Search className="w-4 h-4" aria-hidden="true" style={{ color: 'var(--color-ink-3)' }} />
+              <input
+                type="search"
+                aria-label="Search repositories"
+                placeholder="Search repositories…"
+                value={repositorySearch}
+                onChange={e => setRepositorySearch(e.target.value)}
+                style={{ minWidth: 160, width: '100%', minHeight: 42, background: 'transparent', color: 'inherit', border: 0, font: 'inherit' }}
+              />
+            </label>
+          <select aria-label="Repository" value={repo} onChange={e => setRepo(e.target.value)} style={selectStyle}>
             <option value="">all repositories</option>
-            <option value="purchase">purchase</option>
-            <option value="usermgt">usermgt</option>
-            <option value="coop">coop</option>
-            <option value="backoffice">backoffice</option>
+            {repo && !filteredRepositories.includes(repo) && <option value={repo}>{repo} (selected)</option>}
+            {filteredRepositories.map(name => <option key={name} value={name}>{name}</option>)}
+            {filteredRepositories.length === 0 && <option disabled>No matching repositories</option>}
           </select>
+            <span role="status" className="mono" style={{ color: 'var(--color-ink-3)', fontSize: 'var(--text-xs)' }}>
+              {filteredRepositories.length} / {repositories.length} repos
+            </span>
+          </div>
           <select value={status} onChange={e => setStatus(e.target.value)} style={selectStyle}>
             <option value="">all states</option>
             <option value="active">active</option>
@@ -112,6 +153,7 @@ function PRList() {
             <option value="abandoned">abandoned</option>
           </select>
         </div>
+        {repositoryError && <p role="status" style={{ color: 'var(--color-warning)', marginTop: 'var(--space-xs)' }}>{repositoryError}</p>}
       </section>
 
       <section style={{ display: 'grid', gap: 'var(--space-sm)' }}>

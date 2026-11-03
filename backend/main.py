@@ -72,6 +72,12 @@ async def lifespan(app: FastAPI):
         id="discussion_sync",
         replace_existing=True,
     )
+    scheduler.add_job(
+        scheduled_poll,
+        "date",
+        id="initial_pr_poll",
+        replace_existing=True,
+    )
     scheduler.start()
 
     # Expose scheduler to API routes
@@ -79,9 +85,10 @@ async def lifespan(app: FastAPI):
     app.state.poll_interval = settings.POLL_INTERVAL_MINUTES
     app.state.poller_enabled = True
 
-    # Run initial poll
-    logger.info("Running initial poll...")
-    await scheduled_poll()
+    # Do not make API readiness depend on Azure DevOps or LLM latency. The
+    # one-shot scheduler job above runs the initial poll as soon as the event
+    # loop is available, independently from the FastAPI lifespan handshake.
+    logger.info("Initial poll scheduled in background")
 
     yield
 

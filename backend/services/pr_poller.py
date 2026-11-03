@@ -63,7 +63,14 @@ async def _poll_and_review(db: AsyncSession) -> Dict[str, Any]:
         "errors": [],
     }
 
-    for repo in settings.repos_list:
+    try:
+        repos = await client.get_monitored_repositories()
+    except Exception:
+        logger.exception("Unable to discover repositories")
+        summary["errors"].append("Unable to discover repositories")
+        return summary
+
+    for repo in repos:
         try:
             # Get PRs where reviewer is assigned
             prs = await client.get_prs_for_reviewer(repo, reviewer)
@@ -482,6 +489,9 @@ async def _complete_review(
             "owasp": f.owasp,
             "code": f.code,
             "source": f.source,
+            "source_evidence": f.source_evidence,
+            "sink_evidence": f.sink_evidence,
+            "call_path": f.call_path,
         }
         for f in security_findings
     ])
@@ -530,7 +540,7 @@ async def _complete_review(
             owasp_tag=sf.owasp,
             file_path=sf.file,
             line_number=sf.line,
-            description=f"**{sf.pattern}** detected via {sf.source}\n\nCode: `{sf.code}`",
+            description=_format_security_description(sf),
             code_snippet=sf.code,
             fix_suggestion=_get_fix_suggestion(sf.pattern),
             is_automated=True,
@@ -606,6 +616,18 @@ async def _complete_review(
     # Auto-comment if enabled
     await _maybe_auto_comment(db, repo, pr, review)
     return True
+
+
+def _format_security_description(finding) -> str:
+    """Keep scanner evidence visible when a finding is posted to Azure DevOps."""
+    description = f"**{finding.pattern}** detected via {finding.source}"
+    if finding.source_evidence:
+        description += f"\n\n- Source: `{finding.source_evidence}`"
+    if finding.sink_evidence:
+        description += f"\n- Sink: `{finding.sink_evidence}`"
+    if finding.call_path:
+        description += f"\n- Call path: `{finding.call_path}`"
+    return f"{description}\n\nCode: `{finding.code}`"
 
 
 async def _maybe_auto_comment(

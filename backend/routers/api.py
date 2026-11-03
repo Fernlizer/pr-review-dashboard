@@ -19,6 +19,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api")
 
 
+@router.get("/repositories")
+async def list_repositories():
+    from services.azure_client import AzureDevOpsClient
+
+    try:
+        return {"repositories": await AzureDevOpsClient().get_monitored_repositories()}
+    except Exception:
+        logger.exception("Unable to load monitored repositories")
+        raise HTTPException(502, "Unable to load repositories. Please try again.")
+
+
 # --- PRs ---
 
 @router.get("/prs")

@@ -198,7 +198,7 @@ docker compose up -d
 |----------|---------|----------|
 | `AZURE_DEVOPS_PAT` | *(required)* | Personal Access Token จาก Azure DevOps |
 | `REVIEWER_NAME` | `FERN` | ชื่อที่ใช้กรอง PR (ตรงกับ `displayName` หรือ `uniqueName` ใน Azure DevOps) |
-| `REPOS` | `purchase,usermgt,coop,backoffice` | Repositories ที่ต้องการ poll (comma-separated) |
+| `REPOS` | `purchase,usermgt,coop,backoffice` | Repositories ที่ต้องการ poll (comma-separated); ใช้ `*` เพื่อค้นหาทุก repo ในโปรเจกต์อัตโนมัติ และกรอง PR ตาม `REVIEWER_NAME` |
 | `POLL_INTERVAL_MINUTES` | `10` | ความถี่ polling (นาที) — เปลี่ยนได้ผ่านหน้า Settings |
 
 ### Database URL
@@ -270,7 +270,7 @@ environment:
 |----------|----------|-------|
 | **Hardcoded Secrets** | password, api_key, token, JWT, AWS key, private key | A07 |
 | **Injection** | SQL concat, command injection, eval, deserialization | A03 |
-| **SSRF** | User-controlled URLs in fetch/axios | A10 |
+| **SSRF** | User-controlled target flowing directly to an outbound HTTP client; findings include source, sink, and same-call path evidence | A10 |
 | **Path Traversal** | File operations with user input | A01 |
 | **Sensitive Data** | Passwords in logs/responses, CORS wildcard | A09, A05 |
 | **Insecure Config** | SSL verify false, debug mode | A05, A02 |

@@ -60,6 +60,20 @@ class AzureDevOpsClient:
                 return None
             return text
 
+    async def get_monitored_repositories(self) -> List[str]:
+        repos = settings.repos_list
+        if "*" in repos:
+            return await self.list_repositories()
+        return sorted(set(repos))
+
+    async def list_repositories(self) -> List[str]:
+        """Discover enabled repositories visible to the configured credentials."""
+        data = await self._get(f"{self.repo_base}?includeHidden=true&api-version=7.1")
+        return sorted({
+            repo["name"] for repo in data.get("value", [])
+            if repo.get("name") and not repo.get("isDisabled", False)
+        })
+
     async def get_prs_for_reviewer(self, repo: str, reviewer_name: str) -> List[Dict[str, Any]]:
         """Get active PRs where reviewer_name is a required or optional reviewer."""
         url = (

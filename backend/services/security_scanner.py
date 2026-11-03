@@ -64,15 +64,6 @@ SECURITY_PATTERNS: Dict[str, tuple] = {
         r'(?i)(XMLParser|parseString|libxml|DOMParser).*?(?:noent|resolveExternals)',
         "HIGH", "A05:Security Misconfiguration",
     ),
-    # --- SSRF (HIGH) ---
-    "ssrf_user_url": (
-        r'(?i)(fetch|axios|request|http\.get|https\.get|urllib)\s*\([^)]*(?:req\.|params\.|query\.|body\.)',
-        "HIGH", "A10:Server-Side Request Forgery",
-    ),
-    "ssrf_url_construct": (
-        r'(?i)(fetch|axios|request)\s*\(\s*[`"\'].*\$\{.*(?:req\.|params\.)',
-        "HIGH", "A10:Server-Side Request Forgery",
-    ),
     # --- Path Traversal (MEDIUM) ---
     "path_traversal": (
         r'(?:readFile|readFileSync|fs\.read|open|sendFile)\s*\([^)]*\+',
@@ -129,6 +120,30 @@ SECURITY_PATTERNS: Dict[str, tuple] = {
     ),
 }
 
+# SSRF needs both a user-controlled request target and an outbound HTTP sink.
+# Keep this separate from SECURITY_PATTERNS: a line-level regex such as
+# ``request(... req.)`` also matches identifiers like ``BadRequest``.
+_SSRF_SINK = re.compile(
+    r"\b(?P<sink>"
+    r"fetch|"
+    r"axios\s*\.\s*(?:request|get|post|put|patch|delete|head|options)|"
+    r"(?:http|https)\s*\.\s*(?:request|get)|"
+    r"got(?:\s*\.\s*(?:get|post|put|patch|delete|head|stream))?|"
+    r"request"
+    r")\s*\(",
+    re.IGNORECASE,
+)
+_SSRF_USER_CONTROLLED = re.compile(
+    r"\b(?:req|request)\s*\.\s*(?:params|query|body)"
+    r"(?:\s*\.\s*[A-Za-z_$][\w$]*)*"
+    r"|\b(?:params|query|body)\s*\.\s*[A-Za-z_$][\w$]*",
+    re.IGNORECASE,
+)
+_SSRF_ALLOWLIST_GUARD = re.compile(
+    r"\b(?:is|assert|validate)(?:Allowed|Allowlisted)(?:Url|Uri|Host|Hostname)\s*\(",
+    re.IGNORECASE,
+)
+
 
 @dataclass
 class SecurityFinding:
@@ -139,6 +154,60 @@ class SecurityFinding:
     owasp: str
     code: str
     source: str  # "grep" or "semgrep"
+    source_evidence: Optional[str] = None
+    sink_evidence: Optional[str] = None
+    call_path: Optional[str] = None
+
+
+def _call_arguments(line: str, open_paren_index: int) -> str:
+    """Return the balanced argument list for a call that starts on this line."""
+    depth = 0
+    quote = None
+    escaped = False
+    for index in range(open_paren_index, len(line)):
+        char = line[index]
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            continue
+        if char in "'\"`":
+            quote = char
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return line[open_paren_index + 1:index]
+    return line[open_paren_index + 1:]
+
+
+def _scan_ssrf_line(filepath: str, line_number: int, line: str) -> Optional[SecurityFinding]:
+    """Return a HIGH SSRF finding only when source and outbound sink share a call."""
+    for sink_match in _SSRF_SINK.finditer(line):
+        arguments = _call_arguments(line, sink_match.end() - 1)
+        source_match = _SSRF_USER_CONTROLLED.search(arguments)
+        if not source_match or _SSRF_ALLOWLIST_GUARD.search(arguments):
+            continue
+
+        source_evidence = source_match.group(0)
+        sink_evidence = f"{sink_match.group('sink')} (...)"
+        return SecurityFinding(
+            file=filepath,
+            line=line_number,
+            pattern="ssrf_user_controlled_outbound_request",
+            severity="HIGH",
+            owasp="A10:Server-Side Request Forgery",
+            code=line.strip()[:200],
+            source="grep",
+            source_evidence=source_evidence,
+            sink_evidence=sink_evidence,
+            call_path=f"{source_evidence} -> {sink_evidence}",
+        )
+    return None
 
 
 def scan_with_grep(files_content: Dict[str, str]) -> List[SecurityFinding]:
@@ -148,8 +217,8 @@ def scan_with_grep(files_content: Dict[str, str]) -> List[SecurityFinding]:
         if not content:
             continue
         lines = content.split("\n")
-        for pattern_name, (regex, severity, owasp) in SECURITY_PATTERNS.items():
-            for i, line in enumerate(lines):
+        for i, line in enumerate(lines):
+            for pattern_name, (regex, severity, owasp) in SECURITY_PATTERNS.items():
                 if re.search(regex, line):
                     findings.append(SecurityFinding(
                         file=filepath,
@@ -160,6 +229,9 @@ def scan_with_grep(files_content: Dict[str, str]) -> List[SecurityFinding]:
                         code=line.strip()[:200],
                         source="grep",
                     ))
+            ssrf_finding = _scan_ssrf_line(filepath, i + 1, line)
+            if ssrf_finding:
+                findings.append(ssrf_finding)
     return findings
 
 

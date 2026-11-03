@@ -3,6 +3,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from services.azure_client import AzureDevOpsClient
 from models import PullRequest
 from services import pr_poller
 
@@ -41,6 +42,7 @@ class PollerTests(unittest.IsolatedAsyncioTestCase):
         db.rollback = AsyncMock()
         states = {repo: SimpleNamespace(last_poll_at=None, last_seen_pr_ids="[]") for repo in ("a", "b", "c")}
         client = MagicMock()
+        client.get_monitored_repositories = lambda: AzureDevOpsClient.get_monitored_repositories(client)
         client.get_prs_for_reviewer = AsyncMock(return_value=[])
 
         with patch.object(pr_poller.settings, "REPOS", "a,b,c"), patch(
@@ -53,6 +55,32 @@ class PollerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(db.rollback.await_count, 0)
         self.assertTrue(all(state.last_poll_at is not None for state in states.values()))
 
+    async def test_wildcard_discovers_repositories(self):
+        db = MagicMock(commit=AsyncMock(), rollback=AsyncMock())
+        client = MagicMock()
+        client.get_monitored_repositories = lambda: AzureDevOpsClient.get_monitored_repositories(client)
+        client.list_repositories = AsyncMock(return_value=["new-repo", "purchase"])
+        client.get_prs_for_reviewer = AsyncMock(return_value=[])
+        state = SimpleNamespace(last_poll_at=None, last_seen_pr_ids="[]")
+        with patch.object(pr_poller.settings, "REPOS", "*"), patch(
+            "services.pr_poller.AzureDevOpsClient", return_value=client
+        ), patch("services.pr_poller.get_or_create_poll_state", new=AsyncMock(return_value=state)):
+            result = await pr_poller._poll_and_review(db)
+        self.assertEqual(result["repos_polled"], 2)
+        self.assertEqual([c.args[0] for c in client.get_prs_for_reviewer.await_args_list], ["new-repo", "purchase"])
+
+    async def test_discovery_failure_does_not_poll_literal_wildcard(self):
+        client = MagicMock()
+        client.get_monitored_repositories = lambda: AzureDevOpsClient.get_monitored_repositories(client)
+        client.list_repositories = AsyncMock(side_effect=RuntimeError("unavailable"))
+        client.get_prs_for_reviewer = AsyncMock()
+        with patch.object(pr_poller.settings, "REPOS", "*"), patch(
+            "services.pr_poller.AzureDevOpsClient", return_value=client
+        ):
+            result = await pr_poller._poll_and_review(MagicMock())
+        self.assertEqual(len(result["errors"]), 1)
+        client.get_prs_for_reviewer.assert_not_awaited()
+
     async def test_recovery_state_does_not_reprocess_existing_prs(self):
         db = MagicMock()
         db.commit = AsyncMock()
@@ -60,6 +88,7 @@ class PollerTests(unittest.IsolatedAsyncioTestCase):
         db.execute = AsyncMock(return_value=_ScalarResult(1))
         state = SimpleNamespace(last_poll_at=None, last_seen_pr_ids="[]")
         client = MagicMock()
+        client.get_monitored_repositories = lambda: AzureDevOpsClient.get_monitored_repositories(client)
         client.get_prs_for_reviewer = AsyncMock(return_value=[{"azure_pr_id": 99}])
 
         with patch.object(pr_poller.settings, "REPOS", "purchase"), patch(
@@ -79,6 +108,7 @@ class PollerTests(unittest.IsolatedAsyncioTestCase):
         db.execute = AsyncMock(side_effect=[_ScalarResult(1), _RowsResult([])])
         state = SimpleNamespace(last_poll_at=object(), last_seen_pr_ids="[]")
         client = MagicMock()
+        client.get_monitored_repositories = lambda: AzureDevOpsClient.get_monitored_repositories(client)
         client.get_prs_for_reviewer = AsyncMock(return_value=[{"azure_pr_id": 99}])
 
         with patch.object(pr_poller.settings, "REPOS", "purchase"), patch(
@@ -118,6 +148,7 @@ class PollerTests(unittest.IsolatedAsyncioTestCase):
             "target_branch": "main",
         }
         client = MagicMock()
+        client.get_monitored_repositories = lambda: AzureDevOpsClient.get_monitored_repositories(client)
         client.get_prs_for_reviewer = AsyncMock(return_value=[pr_data])
         client.get_pr_iterations = AsyncMock(return_value=(2, "new-source", "target"))
 
@@ -142,6 +173,7 @@ class PollerTests(unittest.IsolatedAsyncioTestCase):
         db.flush = AsyncMock()
         db.add = MagicMock()
         client = MagicMock()
+        client.get_monitored_repositories = lambda: AzureDevOpsClient.get_monitored_repositories(client)
         client.get_pr_iterations = AsyncMock(side_effect=RuntimeError("Azure unavailable"))
         existing_pr = PullRequest(id=7, azure_pr_id=99, repo="purchase")
         pr_data = {
